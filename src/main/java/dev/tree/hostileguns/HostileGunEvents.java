@@ -22,6 +22,7 @@ import net.neoforged.neoforge.event.tick.EntityTickEvent;
 public final class HostileGunEvents {
     private static final String ROLLED = "hostileguns_rolled";
     private static final String ARMED = "hostileguns_armed";
+    private static final String GUN_ID = "hostileguns_gun_id";
     private static final String COOLDOWN = "hostileguns_cooldown";
     private static final String AIM_TARGET = "hostileguns_aim_target";
     private static final String AIM_DELAY = "hostileguns_aim_delay";
@@ -52,8 +53,10 @@ public final class HostileGunEvents {
         }
         if (gun == null) return;
 
-        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(gun));
-        mob.setDropChance(EquipmentSlot.MAINHAND, 0.05F);
+        equip(mob, gun);
+        ResourceLocation gunId = BuiltInRegistries.ITEM.getKey(gun);
+        if (gunId != null) data.putString(GUN_ID, gunId.toString());
+
         data.putBoolean(ARMED, true);
         data.putInt(COOLDOWN, mob.getRandom().nextIntBetweenInclusive(6, 16));
         data.putDouble(AIM_SKILL, 0.78D + mob.getRandom().nextDouble() * 0.60D);
@@ -67,7 +70,14 @@ public final class HostileGunEvents {
         var data = mob.getPersistentData();
         if (!data.getBoolean(ARMED) || !mob.isAlive()) return;
 
+        ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
         ItemStack held = mob.getMainHandItem();
+
+        if ((held.isEmpty() || !isPointBlankGun(held.getItem())) && isCreateCyberneticsMob(mobId)) {
+            restoreCyberneticsGun(mob);
+            held = mob.getMainHandItem();
+        }
+
         if (held.isEmpty() || !isPointBlankGun(held.getItem())) {
             data.putBoolean(ARMED, false);
             return;
@@ -112,6 +122,21 @@ public final class HostileGunEvents {
         fireWeapon(mob, target, held.getItem(), distance);
     }
 
+    private static void restoreCyberneticsGun(Mob mob) {
+        var data = mob.getPersistentData();
+        String id = data.getString(GUN_ID);
+        if (id.isEmpty()) return;
+        ResourceLocation key = ResourceLocation.tryParse(id);
+        if (key == null) return;
+        Item gun = BuiltInRegistries.ITEM.get(key);
+        if (gun != null && isPointBlankGun(gun)) equip(mob, gun);
+    }
+
+    private static void equip(Mob mob, Item gun) {
+        mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(gun));
+        mob.setDropChance(EquipmentSlot.MAINHAND, 0.05F);
+    }
+
     private static void fireWeapon(Mob mob, LivingEntity target, Item gun, double distance) {
         if (!(mob.level() instanceof ServerLevel level)) return;
 
@@ -132,9 +157,9 @@ public final class HostileGunEvents {
 
         if (HostileGunsConfig.muzzleFlashEffects) {
             level.sendParticles(ParticleTypes.FLAME, muzzle.x, muzzle.y, muzzle.z,
-                    3, 0.025D, 0.025D, 0.025D, 0.006D);
+                    2, 0.018D, 0.018D, 0.018D, 0.003D);
             level.sendParticles(ParticleTypes.SMOKE, muzzle.x, muzzle.y, muzzle.z,
-                    1, 0.018D, 0.018D, 0.018D, 0.004D);
+                    1, 0.015D, 0.015D, 0.015D, 0.002D);
         }
 
         SoundEvent fireSound = PointBlankReflection.fireSound(gun);
@@ -186,9 +211,7 @@ public final class HostileGunEvents {
         }
 
         int chosen = mob.getRandom().nextIntBetweenInclusive(min, max);
-        if (mob.getRandom().nextFloat() < 0.08F) {
-            chosen += mob.getRandom().nextIntBetweenInclusive(2, 7);
-        }
+        if (mob.getRandom().nextFloat() < 0.08F) chosen += mob.getRandom().nextIntBetweenInclusive(2, 7);
         return chosen;
     }
 
@@ -196,6 +219,14 @@ public final class HostileGunEvents {
         if (HostileGunsConfig.excludedEntities.contains(id.toString())) return false;
         if (!HostileGunsConfig.allowModdedHostiles && !"minecraft".equals(id.getNamespace())) return false;
         return mob.getType().getCategory() == MobCategory.MONSTER || mob instanceof Monster;
+    }
+
+    private static boolean isCreateCyberneticsMob(ResourceLocation id) {
+        if (id == null || !"createcybernetics".equals(id.getNamespace())) return false;
+        return switch (id.getPath()) {
+            case "cyberzombie", "cyberskeleton", "punklin", "pigstrom", "hogboy" -> true;
+            default -> false;
+        };
     }
 
     private static boolean isPointBlankGun(Item item) {

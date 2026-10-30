@@ -1,0 +1,48 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="CC0-1.0"
+
+[[mods]]
+modId="mainframe_progression"
+version="1.0.0"
+displayName="Mainframe Progression Bridge"
+authors="Tree + OpenAI"
+description='''
+Bridges RPG Attribute System, Remnants: RPG Mobs and Create: Chromeware for Mainframe.
+Adds a spendable Cyberware Capacity stat and a faster but still progressive RPG pacing preset.
+'''
+
+[[dependencies.mainframe_progression]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.mainframe_progression]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.mainframe_progression]]
+modId="rpg_attribute_system"
+type="optional"
+versionRange="[5.0.1,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.mainframe_progression]]
+modId="chromeware"
+type="optional"
+versionRange="[1.1.0,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.mainframe_progression]]
+modId="remnant_mobs"
+type="optional"
+versionRange="[3.0.0,)"
+ordering="AFTER"
+side="BOTH"

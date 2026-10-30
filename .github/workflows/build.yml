@@ -1,4 +1,4 @@
-name: Build Hostile Guns NeoForge 1.21.1
+name: Build Mainframe Mods NeoForge 1.21.1
 
 on:
   workflow_dispatch:
@@ -22,8 +22,13 @@ jobs:
           gradle-version: '8.10.2'
       - name: Build
         run: gradle build --stacktrace
-      - name: Upload compiled mod
+      - name: Upload Hostile Guns
         uses: actions/upload-artifact@v4
         with:
           name: HostileGuns-NeoForge-1.21.1
           path: build/libs/*.jar
+      - name: Upload Mainframe Progression Bridge
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mainframe-Progression-Bridge-NeoForge-1.21.1
+          path: progressionbridge/build/libs/*.jar

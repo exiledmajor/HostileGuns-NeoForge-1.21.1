@@ -1,0 +1,24 @@
+plugins {
+    id 'net.neoforged.moddev' version '2.0.80'
+}
+
+group = 'dev.tree'
+version = '1.0.0'
+base { archivesName = 'mainframe-progression-bridge-neoforge-1.21.1' }
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+neoForge {
+    version = '21.1.202'
+    mods {
+        mainframe_progression {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}

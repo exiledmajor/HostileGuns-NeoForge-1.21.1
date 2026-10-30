@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "dev.tree.hostileguns.client.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GunItemRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

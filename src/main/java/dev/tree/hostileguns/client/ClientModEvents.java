@@ -1,10 +1,8 @@
 package dev.tree.hostileguns.client;
 
-import dev.tree.hostileguns.HostileBulletEntity;
 import dev.tree.hostileguns.HostileGuns;
 import dev.tree.hostileguns.ModEntities;
-import net.minecraft.client.renderer.entity.EntityRenderer;
-import net.minecraft.client.renderer.entity.SnowballRenderer;
+import net.minecraft.client.renderer.entity.ThrownItemRenderer;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -15,9 +13,7 @@ public final class ClientModEvents {
     private ClientModEvents() {}
 
     @SubscribeEvent
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
-        event.registerEntityRenderer(ModEntities.HOSTILE_BULLET.get(),
-                context -> (EntityRenderer<HostileBulletEntity>) (EntityRenderer) new SnowballRenderer(context));
+        event.registerEntityRenderer(ModEntities.HOSTILE_BULLET.get(), ThrownItemRenderer::new);
     }
 }

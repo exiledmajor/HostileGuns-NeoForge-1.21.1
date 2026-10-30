@@ -10,6 +10,7 @@ public final class HostileGuns {
 
     public HostileGuns(IEventBus modBus) {
         HostileGunsConfig.load();
+        ModEntities.ENTITY_TYPES.register(modBus);
         NeoForge.EVENT_BUS.addListener(HostileGunEvents::onEntityJoin);
         NeoForge.EVENT_BUS.addListener(HostileGunEvents::onEntityTick);
     }

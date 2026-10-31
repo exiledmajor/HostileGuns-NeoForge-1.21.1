@@ -9,7 +9,7 @@ displayName="Mainframe Progression Bridge"
 authors="Tree + OpenAI"
 description='''
 Bridges RPG Attribute System, Remnants: RPG Mobs and Create: Chromeware for Mainframe.
-Adds a spendable Cyberware Capacity stat and a faster but still progressive RPG pacing preset.
+Adds Cyberware Versatility, a premium progression stat for capacity and modest cyberware recovery, plus a Remnants-inspired cyberpunk RPG presentation preset.
 '''
 
 [[dependencies.mainframe_progression]]

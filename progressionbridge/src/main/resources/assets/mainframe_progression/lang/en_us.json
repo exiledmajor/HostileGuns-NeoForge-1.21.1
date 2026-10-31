@@ -1,3 +1,6 @@
 {
-  "attribute.name.mainframe_progression.cyberware_versatility": "Cyberware Versatility"
+  "attribute.name.mainframe_progression.cyberware_versatility": "Cyberware Versatility",
+  "item.mainframe_progression.cyberware_repair_kit": "Cyberware Repair Kit",
+  "message.mainframe_progression.repair_success": "Repaired %s cyberware implant(s).",
+  "message.mainframe_progression.repair_none": "No damaged cyberware implants to repair."
 }

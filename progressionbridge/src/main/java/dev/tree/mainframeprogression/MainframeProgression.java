@@ -47,7 +47,7 @@ public final class MainframeProgression {
     }
 
     private static void addCreativeItems(BuildCreativeModeTabContentsEvent event) {
-        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) event.accept(CYBERWARE_REPAIR_KIT);
+        if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) event.accept(CYBERWARE_REPAIR_KIT.get());
     }
 
     private static void modifyAttributes(EntityAttributeModificationEvent event) {

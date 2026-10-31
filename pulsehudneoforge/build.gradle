@@ -1,0 +1,22 @@
+plugins {
+    id 'net.neoforged.moddev' version '2.0.80'
+}
+
+group = 'com.pulsehud'
+version = '1.0.0-neoforge'
+base { archivesName = 'pulsehud-neoforge-1.21.1' }
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+neoForge {
+    version = '21.1.202'
+    mods {
+        pulsehud {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+repositories { mavenCentral() }

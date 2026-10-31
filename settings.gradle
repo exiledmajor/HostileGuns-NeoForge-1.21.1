@@ -6,3 +6,4 @@ pluginManagement {
 }
 rootProject.name = 'HostileGuns-NeoForge-1.21.1'
 include 'progressionbridge'
+include 'pulsehudneoforge'

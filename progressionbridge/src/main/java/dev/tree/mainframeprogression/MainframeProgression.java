@@ -2,6 +2,7 @@ package dev.tree.mainframeprogression;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.RangedAttribute;
 import net.minecraft.world.entity.player.Player;
@@ -9,6 +10,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityAttributeModificationEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -31,6 +33,7 @@ public final class MainframeProgression {
         modBus.addListener(MainframeProgression::modifyAttributes);
         ProgressionPreset.installOnce();
         NeoForge.EVENT_BUS.addListener(MainframeProgression::playerTick);
+        NeoForge.EVENT_BUS.addListener(MainframeProgression::livingDeath);
     }
 
     private static void modifyAttributes(EntityAttributeModificationEvent event) {
@@ -39,9 +42,17 @@ public final class MainframeProgression {
 
     private static void playerTick(PlayerTickEvent.Post event) {
         Player player = event.getEntity();
-        if (player.level().isClientSide() || player.tickCount % 20 != 0) return;
+        if (player.level().isClientSide()) return;
 
         double versatility = player.getAttributeValue(CYBERWARE_VERSATILITY);
-        ChromewareBridge.syncVersatility(player, (int) Math.round(versatility));
+        ChromewareBridge.tick(player, (int)Math.round(versatility));
+    }
+
+    private static void livingDeath(LivingDeathEvent event) {
+        if (event.isCanceled() || event.getEntity().level().isClientSide()) return;
+        LivingEntity entity = event.getEntity();
+        if (entity instanceof Player player) {
+            ChromewareBridge.onDeath(player, event.getSource());
+        }
     }
 }

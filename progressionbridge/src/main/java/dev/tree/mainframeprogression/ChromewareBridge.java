@@ -333,6 +333,19 @@ public final class ChromewareBridge {
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(custom));
     }
 
+    /** Repairs every installed implant by the supplied normalized amount and returns the count repaired. */
+    public static int repairAll(Player player, double amount) {
+        if (!Double.isFinite(amount) || amount <= 0.0D) return 0;
+        int repaired = 0;
+        for (ItemStack stack : installedCyberware(player)) {
+            double before = wear(player, stack);
+            if (before <= 0.0D) continue;
+            repairWear(player, stack, amount);
+            if (wear(player, stack) < before) repaired++;
+        }
+        return repaired;
+    }
+
     public static boolean isImplantDamaged(Player player, Object implant) {
         try {
             Field id = implant.getClass().getField("id");

@@ -10,7 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class ProgressionPreset {
-    private static final String MARKER = "mainframe_progression_preset_v1.marker";
+    private static final String MARKER = "mainframe_progression_preset_v2.marker";
 
     private ProgressionPreset() {}
 
@@ -25,6 +25,7 @@ public final class ProgressionPreset {
             installRasAttribute(config);
             tuneRas(config);
             tuneRemnants(config);
+            installCyberpunkUi(config);
 
             Files.writeString(marker,
                     "Mainframe progression preset applied once. Delete this file to reapply defaults.\n",
@@ -40,37 +41,33 @@ public final class ProgressionPreset {
         Files.createDirectories(displayDir);
 
         Path attr = attrDir.resolve("attribute_9.json");
-        if (!Files.exists(attr)) {
-            Files.writeString(attr, """
-                    {
-                      "display_name": "Cyberware Capacity : ",
-                      "description": "Each point adds 2 Create: Chromeware capacity. This uses the same spare points as your other RPG attributes.",
-                      "cmd_to_exc": [
-                        "/attribute @s mainframe_progression:cyberware_capacity base set [param(2.0)]"
-                      ],
-                      "on_level_event": "",
-                      "tip_to_display": "§7Expands how much cyberware your body can safely support.",
-                      "init_val_attribute": 0.0,
-                      "max_level": 500.0,
-                      "base_value_per_point": 2.0,
-                      "lock": false,
-                      "icon_path": "screens/att_8.png"
-                    }
-                    """, StandardCharsets.UTF_8);
-        }
+        Files.writeString(attr, """
+                {
+                  "display_name": "Cyberware Versatility : ",
+                  "description": "Each point adds 1 Chromeware capacity and slightly improves cyberware recovery. Designed as a premium stat.",
+                  "cmd_to_exc": [
+                    "/attribute @s mainframe_progression:cyberware_versatility base set [param(1.0)]"
+                  ],
+                  "on_level_event": "",
+                  "tip_to_display": "§7More chrome, tighter recovery. Capacity +1 and a small cooldown reduction per point.",
+                  "init_val_attribute": 0.0,
+                  "max_level": 250.0,
+                  "base_value_per_point": 1.0,
+                  "lock": false,
+                  "icon_path": "screens/att_9.png"
+                }
+                """, StandardCharsets.UTF_8);
 
         Path display = displayDir.resolve("attribute_9.json");
-        if (!Files.exists(display)) {
-            Files.writeString(display, """
-                    {
-                      "enable": true,
-                      "display_name": "§fCyberware Capacity §f| §6",
-                      "attribute_namespace": "mainframe_progression",
-                      "attribute_name": "cyberware_capacity",
-                      "display_modifer": 1.0
-                    }
-                    """, StandardCharsets.UTF_8);
-        }
+        Files.writeString(display, """
+                {
+                  "enable": true,
+                  "display_name": "§bCyberware Versatility §f| §d",
+                  "attribute_namespace": "mainframe_progression",
+                  "attribute_name": "cyberware_versatility",
+                  "display_modifer": 1.0
+                }
+                """, StandardCharsets.UTF_8);
     }
 
     private static void tuneRas(Path config) throws IOException {
@@ -110,6 +107,88 @@ public final class ProgressionPreset {
         text = replaceNumber(text, "per_level", 1.35D, 2);
         text = replaceNumber(text, "valor", 22.0D, 1);
         Files.writeString(rewards, text, StandardCharsets.UTF_8);
+    }
+
+
+    private static void installCyberpunkUi(Path config) throws IOException {
+        Path displayDir = config.resolve("ras").resolve("display");
+        Files.createDirectories(displayDir);
+
+        // RAS 5.0 exposes its entire menu/HUD palette through display/ui.json.
+        // This palette deliberately reuses Remnants' beige/green/blue/purple/orange
+        // and switches to the Minecraft pixel font for a sharper cyberpunk terminal look.
+        Files.writeString(displayDir.resolve("ui.json"), """
+                {
+                  "font": "minecraft",
+                  "animations": true,
+                  "animation_speed": 1.15,
+                  "ambient_particles": true,
+                  "background_blur": true,
+                  "menu_sounds": true,
+                  "hud_style": "soulslike",
+                  "hud_scale": 1.0,
+                  "level_up_banner": true,
+                  "level_up_sound": true,
+                  "accent_color": "#F0A43A",
+                  "text_color": "#CFC8B8",
+                  "increase_color": "#9BC46A",
+                  "decrease_color": "#B57BEB",
+                  "menu_background_opacity": 0.94,
+                  "menu_sound_volume": 0.85,
+                  "tooltip_delay": 0.2,
+                  "hud_width": 160,
+                  "hud_background": true,
+                  "hud_show_level": true,
+                  "hud_show_experience_text": true,
+                  "hud_idle_opacity": 0.82,
+                  "hud_idle_seconds": 8.0,
+                  "level_up_banner_duration": 3.8,
+                  "level_up_banner_position": 0.34,
+                  "level_up_banner_background_opacity": 0.92,
+                  "level_up_banner_details": true,
+                  "level_up_sound_volume": 0.85
+                }
+                """, StandardCharsets.UTF_8);
+
+        // Rename the progression vocabulary without patching RAS itself.
+        Files.writeString(displayDir.resolve("texts.json"), """
+                {
+                  "banner.title": "Street Rank {level}",
+                  "banner.levels": "+{levels} ranks",
+                  "banner.point": "+{points} upgrade point",
+                  "banner.points": "+{points} upgrade points",
+                  "banner.hint": "Press {key} to jack in",
+                  "hud.level": "Street Rank {level}",
+                  "hud.max_level": "Rank capped",
+                  "tab.level_up": "Augment",
+                  "tab.status": "Vitals",
+                  "tab.records": "Databank",
+                  "button.confirm": "Install",
+                  "button.reset": "Rollback",
+                  "section.attribute_points": "Upgrade Points",
+                  "section.base_stats": "Baseline",
+                  "section.totals": "Live Readout",
+                  "section.attributes": "Augments",
+                  "section.progress": "Street Cred",
+                  "section.points_invested": "Installed Points",
+                  "section.bonuses": "Enhancements",
+                  "summary.level": "Street Rank",
+                  "summary.attribute_points": "Upgrade Points",
+                  "summary.points": "Points",
+                  "summary.experience": "Street Cred",
+                  "hint.level_up": "Select an augment to upgrade",
+                  "hint.level_up_staged": "Install to commit staged upgrades",
+                  "notice.confirmed": "Augments synchronized",
+                  "notice.refused": "Upgrade rejected by host",
+                  "notice.reset": "Staged upgrades rolled back",
+                  "attribute.locked": "Encrypted",
+                  "attribute.invested_one": "{points} point installed",
+                  "attribute.invested": "{points} points installed",
+                  "records.total_experience": "Lifetime street cred",
+                  "records.points_invested": "Installed points",
+                  "records.points_available": "Upgrade points available"
+                }
+                """, StandardCharsets.UTF_8);
     }
 
     private static String replaceNumber(String text, String key, double value) {

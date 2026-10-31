@@ -37,7 +37,7 @@ public abstract class LivingEntityRendererMixin {
         var id = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         if (id == null || !"createcybernetics".equals(id.getNamespace())) return false;
         return switch (id.getPath()) {
-            case "cyberzombie", "cyberskeleton", "punklin", "pigstrom", "hogboy" -> true;
+            case "cyberzombie" -> true;
             default -> false;
         };
     }

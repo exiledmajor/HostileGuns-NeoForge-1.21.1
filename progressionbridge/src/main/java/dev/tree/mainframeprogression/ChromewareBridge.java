@@ -1,12 +1,14 @@
 package dev.tree.mainframeprogression;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -35,7 +37,8 @@ public final class ChromewareBridge {
             if (player.tickCount % 20 == 0) recoverDeathTrauma(player);
             if (player.tickCount % 100 == 0) cyberwareMalfunction(player);
         } catch (ClassNotFoundException ignored) {
-            unavailable = true;
+            // A missing optional feature class must not disable unrelated bridge features.
+            // syncVersatility separately detects whether Chromeware itself is installed.
         } catch (Throwable ignored) {
             // Chromeware is optional and its internals may change. Never break the player tick.
         }
@@ -84,18 +87,20 @@ public final class ChromewareBridge {
         Map<String, Integer> previous = LAST_COOLDOWNS.computeIfAbsent(player.getUUID(), id -> new HashMap<>());
         Map<String, Integer> current = new HashMap<>();
 
+        final boolean[] newlyStarted = {false};
         forEach.invoke(null, player, (java.util.function.BiConsumer<Object, Object>)(id, remaining) -> {
             String key = String.valueOf(id);
             int now = ((Number)remaining).intValue();
             current.put(key, now);
             int before = previous.getOrDefault(key, 0);
-            if (now > 0 && (before == 0 || now > before)) {
-                try {
-                    cooldowns.getMethod("reduce", Player.class, double.class).invoke(null, player, reduction);
-                } catch (Throwable ignored) {}
-            }
+            if (now > 0 && (before == 0 || now > before)) newlyStarted[0] = true;
         });
 
+        // reduce() scales every active cooldown, so apply it once even when several
+        // implants start together rather than compounding the reduction per implant.
+        if (newlyStarted[0]) {
+            cooldowns.getMethod("reduce", Player.class, double.class).invoke(null, player, reduction);
+        }
         previous.clear();
         previous.putAll(current);
         adjustSandevistanCooldown(player, reduction);
@@ -165,11 +170,22 @@ public final class ChromewareBridge {
     private static double deathPressure(Player victim, net.minecraft.world.damagesource.DamageSource source) {
         net.minecraft.world.entity.Entity attacker = source.getEntity();
         net.minecraft.world.entity.Entity direct = source.getDirectEntity();
-        Player killer = attacker instanceof Player p ? p : direct instanceof Player p ? p : null;
+        Player killer = resolvePlayerAttacker(attacker, direct);
 
         if (killer != null) return hasCyberware(killer) ? 0.08D : 0.06D;
         if (attacker instanceof net.minecraft.world.entity.LivingEntity || direct instanceof net.minecraft.world.entity.LivingEntity) return 0.03D;
         return 0.02D;
+    }
+
+    private static Player resolvePlayerAttacker(net.minecraft.world.entity.Entity attacker,
+                                                net.minecraft.world.entity.Entity direct) {
+        if (attacker instanceof Player player) return player;
+        if (direct instanceof Player player) return player;
+        if (direct instanceof net.minecraft.world.entity.projectile.Projectile projectile
+                && projectile.getOwner() instanceof Player player) return player;
+        if (attacker instanceof net.minecraft.world.entity.projectile.Projectile projectile
+                && projectile.getOwner() instanceof Player player) return player;
+        return null;
     }
 
     private static void addPermanentHumanity(Player player, double amount) {
@@ -263,13 +279,19 @@ public final class ChromewareBridge {
     }
 
     private static void addWear(Player player, ItemStack stack, double amount) {
-        String key = wearKey(stack);
-        CompoundTag data = player.getPersistentData();
-        double wear = Math.min(1.0D, data.getDouble(key) + Math.max(0.0D, amount));
-        data.putDouble(key, wear);
+        if (stack.isEmpty() || amount <= 0.0D) return;
+        CompoundTag custom = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        double current = custom.getDouble("mainframe_cyberware_wear");
+        if (!custom.contains("mainframe_cyberware_wear_id")) {
+            // Preserve wear from older versions while moving to per-implant storage.
+            current = Math.max(current, player.getPersistentData().getDouble(legacyWearKey(stack)));
+            custom.putString("mainframe_cyberware_wear_id", UUID.randomUUID().toString());
+        }
+        custom.putDouble("mainframe_cyberware_wear", Math.min(1.0D, current + amount));
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(custom));
     }
 
-    private static String wearKey(ItemStack stack) {
+    private static String legacyWearKey(ItemStack stack) {
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         return WEAR_PREFIX + (id == null ? "unknown" : id.toString().replace(':', '_'));
     }
@@ -291,7 +313,24 @@ public final class ChromewareBridge {
     }
 
     public static double wear(Player player, ItemStack stack) {
-        return player.getPersistentData().getDouble(wearKey(stack));
+        if (stack.isEmpty()) return 0.0D;
+        CompoundTag custom = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        if (custom.contains("mainframe_cyberware_wear_id")) {
+            return Math.max(0.0D, Math.min(1.0D, custom.getDouble("mainframe_cyberware_wear")));
+        }
+        return Math.max(0.0D, Math.min(1.0D, player.getPersistentData().getDouble(legacyWearKey(stack))));
+    }
+
+    /** Repairs an installed implant's accumulated wear. Amount is normalized from 0.0 to 1.0. */
+    public static void repairWear(Player player, ItemStack stack, double amount) {
+        if (stack.isEmpty() || !Double.isFinite(amount) || amount <= 0.0D) return;
+        CompoundTag custom = stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+        double current = wear(player, stack);
+        if (!custom.contains("mainframe_cyberware_wear_id")) {
+            custom.putString("mainframe_cyberware_wear_id", UUID.randomUUID().toString());
+        }
+        custom.putDouble("mainframe_cyberware_wear", Math.max(0.0D, current - Math.min(1.0D, amount)));
+        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(custom));
     }
 
     public static boolean isImplantDamaged(Player player, Object implant) {

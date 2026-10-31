@@ -12,7 +12,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class GunItemRendererMixin {
     @Inject(method="getPlayer",at=@At("RETURN"),cancellable=true,remap=false,require=0)
     private void hostileguns$substituteNullPlayer(ItemDisplayContext mode,CallbackInfoReturnable<Player> cir){
-        if(cir.getReturnValue()==null && Minecraft.getInstance().player!=null)
+        // Point Blank's renderer expects a Player even for third-person item rendering.
+        // Cybernetics mobs are not players, so without this fallback their gun model can
+        // disappear even though the server-side main-hand stack is correct.
+        if (cir.getReturnValue() == null && Minecraft.getInstance().player != null) {
             cir.setReturnValue(Minecraft.getInstance().player);
+        }
     }
 }

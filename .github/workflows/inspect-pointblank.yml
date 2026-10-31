@@ -1,0 +1,30 @@
+name: Inspect Point Blank Reference
+
+on:
+  push:
+    paths:
+      - .github/workflows/inspect-pointblank.yml
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download CFR
+        run: curl -L --fail -o cfr.jar https://repo1.maven.org/maven2/org/benf/cfr/0.152/cfr-0.152.jar
+      - name: Download Point Blank 2.2.0
+        run: curl -L --fail -o pointblank.jar https://api.modrinth.com/maven/maven.modrinth/og4KPYmA/7jPye7PA/og4KPYmA-7jPye7PA.jar
+      - name: Decompile
+        run: |
+          mkdir -p reference/pointblank-2.2.0
+          java -jar cfr.jar pointblank.jar --outputdir reference/pointblank-2.2.0 --silent true
+      - name: Commit inspection source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reference/pointblank-2.2.0
+          git commit -m "Reference: decompile Point Blank 2.2.0" || exit 0
+          git push

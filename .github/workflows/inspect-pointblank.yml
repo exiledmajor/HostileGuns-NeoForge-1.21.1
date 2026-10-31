@@ -16,7 +16,9 @@ jobs:
       - name: Download CFR
         run: curl -L --fail -o cfr.jar https://repo1.maven.org/maven2/org/benf/cfr/0.152/cfr-0.152.jar
       - name: Download Point Blank 2.2.0
-        run: curl -L --fail -o pointblank.jar https://api.modrinth.com/maven/maven.modrinth/og4KPYmA/7jPye7PA/og4KPYmA-7jPye7PA.jar
+        run: |
+          URL=$(curl -L --fail https://api.modrinth.com/v2/version/7jPye7PA | python -c 'import json,sys; print(json.load(sys.stdin)["files"][0]["url"])')
+          curl -L --fail -o pointblank.jar "$URL"
       - name: Decompile
         run: |
           mkdir -p reference/pointblank-2.2.0

@@ -4,7 +4,8 @@
   "package": "dev.tree.hostileguns.client.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "GunItemRendererMixin"
+    "GunItemRendererMixin",
+    "LivingEntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 0

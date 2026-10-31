@@ -10,7 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class ProgressionPreset {
-    private static final String MARKER = "mainframe_progression_preset_v2.marker";
+    private static final String MARKER = "mainframe_progression_preset_v3.marker";
 
     private ProgressionPreset() {}
 
@@ -44,15 +44,15 @@ public final class ProgressionPreset {
         Files.writeString(attr, """
                 {
                   "display_name": "Cyberware Versatility : ",
-                  "description": "Each point adds 1 Chromeware capacity and slightly improves cyberware recovery. Designed as a premium stat.",
+                  "description": "Each Versatility point adds 1 Chromeware capacity, reduces cyberware cooldowns, and slightly extends duration-based cyberware. It is a premium stat: two RAS upgrade points buy one Versatility point.",
                   "cmd_to_exc": [
                     "/attribute @s mainframe_progression:cyberware_versatility base set [param(1.0)]"
                   ],
                   "on_level_event": "",
-                  "tip_to_display": "§7More chrome, tighter recovery. Capacity +1 and a small cooldown reduction per point.",
+                  "tip_to_display": "§7Premium chrome stat. Capacity +1, cooldown -0.35%, duration +0.15% per point. Two RAS points per Versatility.",
                   "init_val_attribute": 0.0,
                   "max_level": 250.0,
-                  "base_value_per_point": 1.0,
+                  "base_value_per_point": 0.5,
                   "lock": false,
                   "icon_path": "screens/att_9.png"
                 }

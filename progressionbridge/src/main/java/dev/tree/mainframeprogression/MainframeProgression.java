@@ -20,11 +20,11 @@ public final class MainframeProgression {
     public static final DeferredRegister<Attribute> ATTRIBUTES =
             DeferredRegister.create(Registries.ATTRIBUTE, MOD_ID);
 
-    public static final DeferredHolder<Attribute, Attribute> CYBERWARE_CAPACITY =
-            ATTRIBUTES.register("cyberware_capacity",
+    public static final DeferredHolder<Attribute, Attribute> CYBERWARE_VERSATILITY =
+            ATTRIBUTES.register("cyberware_versatility",
                     () -> new RangedAttribute(
-                            "attribute.name.mainframe_progression.cyberware_capacity",
-                            0.0D, 0.0D, 5000.0D).setSyncable(true));
+                            "attribute.name.mainframe_progression.cyberware_versatility",
+                            0.0D, 0.0D, 250.0D).setSyncable(true));
 
     public MainframeProgression(IEventBus modBus) {
         ATTRIBUTES.register(modBus);
@@ -34,14 +34,14 @@ public final class MainframeProgression {
     }
 
     private static void modifyAttributes(EntityAttributeModificationEvent event) {
-        event.add(EntityType.PLAYER, CYBERWARE_CAPACITY);
+        event.add(EntityType.PLAYER, CYBERWARE_VERSATILITY);
     }
 
     private static void playerTick(PlayerTickEvent.Post event) {
         Player player = event.getEntity();
         if (player.level().isClientSide() || player.tickCount % 20 != 0) return;
 
-        double investedCapacity = player.getAttributeValue(CYBERWARE_CAPACITY);
-        ChromewareBridge.syncCapacity(player, (int) Math.round(investedCapacity));
+        double versatility = player.getAttributeValue(CYBERWARE_VERSATILITY);
+        ChromewareBridge.syncVersatility(player, (int) Math.round(versatility));
     }
 }

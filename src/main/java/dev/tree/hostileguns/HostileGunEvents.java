@@ -85,8 +85,8 @@ public final class HostileGunEvents {
             return;
         }
 
-        ensureMagazine(held);
-
+        // Do not auto-fill an empty magazine here. Initialization happens on equip;
+        // subsequent empty magazines must pass through the reload state machine.
         int reload = data.getInt(RELOAD_TICKS);
         if (reload > 0) {
             data.putInt(RELOAD_TICKS, reload - 1);
@@ -136,6 +136,11 @@ public final class HostileGunEvents {
 
         int burstLeft = data.getInt(BURST_LEFT);
         if (burstLeft > 0) {
+            Object burstMode = PointBlankReflection.fireMode(held);
+            if (PointBlankReflection.ammo(held, burstMode) <= 0) {
+                beginReload(mob, held);
+                return;
+            }
             if (fireWeapon(mob, target, held, distance)) {
                 data.putInt(BURST_LEFT, burstLeft - 1);
                 data.putInt(BURST_COOLDOWN, Math.max(1, chooseCooldown(mob, held.getItem())));

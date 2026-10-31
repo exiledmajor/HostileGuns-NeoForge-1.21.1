@@ -160,9 +160,9 @@ public final class HostileGunEvents {
             int burst = PointBlankReflection.burstShots(held, mode);
             if (burst > 1) {
                 data.putInt(BURST_LEFT, burst - 1);
-                data.putInt(BURST_COOLDOWN, Math.max(1, chooseCooldown(mob, held)));
+                data.putInt(BURST_COOLDOWN, Math.max(1, chooseCooldown(mob, held.getItem())));
             } else {
-                data.putInt(COOLDOWN, chooseCooldown(mob, held));
+                data.putInt(COOLDOWN, chooseCooldown(mob, held.getItem()));
             }
         }
     }

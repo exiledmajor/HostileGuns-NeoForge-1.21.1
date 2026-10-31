@@ -1,13 +1,10 @@
 package dev.tree.hostileguns;
 
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -27,13 +24,14 @@ public final class HostileGunEvents {
     private static final String AIM_TARGET = "hostileguns_aim_target";
     private static final String AIM_DELAY = "hostileguns_aim_delay";
     private static final String AIM_SKILL = "hostileguns_aim_skill";
+    private static final String RELOAD_TICKS = "hostileguns_reload_ticks";
+    private static final String BURST_LEFT = "hostileguns_burst_left";
+    private static final String BURST_COOLDOWN = "hostileguns_burst_cooldown";
 
     private HostileGunEvents() {}
 
     public static void onEntityJoin(EntityJoinLevelEvent event) {
-        if (event.getLevel().isClientSide()) return;
-        if (!(event.getEntity() instanceof Mob mob)) return;
-
+        if (event.getLevel().isClientSide() || !(event.getEntity() instanceof Mob mob)) return;
         ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
         if (entityId == null || !eligibleType(mob, entityId)) return;
         tryArm(mob);
@@ -43,7 +41,6 @@ public final class HostileGunEvents {
         var data = mob.getPersistentData();
         if (data.getBoolean(ROLLED)) return;
         data.putBoolean(ROLLED, true);
-
         if (mob.getRandom().nextDouble() >= HostileGunsConfig.armedHostileChance) return;
 
         Item gun = PointBlankGunPool.chooseWeighted(mob.getRandom());
@@ -56,38 +53,46 @@ public final class HostileGunEvents {
         equip(mob, gun);
         ResourceLocation gunId = BuiltInRegistries.ITEM.getKey(gun);
         if (gunId != null) data.putString(GUN_ID, gunId.toString());
-
         data.putBoolean(ARMED, true);
         data.putInt(COOLDOWN, mob.getRandom().nextIntBetweenInclusive(6, 16));
         data.putDouble(AIM_SKILL, 0.78D + mob.getRandom().nextDouble() * 0.60D);
         data.putInt(AIM_TARGET, -1);
         data.putInt(AIM_DELAY, 0);
+        data.putInt(RELOAD_TICKS, 0);
+        data.putInt(BURST_LEFT, 0);
+        data.putInt(BURST_COOLDOWN, 0);
+        ensureMagazine(mob.getMainHandItem());
     }
 
     public static void onEntityTick(EntityTickEvent.Post event) {
         if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) return;
-
         var data = mob.getPersistentData();
         if (!data.getBoolean(ARMED) || !mob.isAlive()) return;
 
         ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
         ItemStack held = mob.getMainHandItem();
 
-        // Create: Cybernetics mobs can re-equip their native weapon after we arm them.
-        // The assigned Point Blank gun always wins, and the offhand is cleared so models
-        // such as the cyberskeleton cannot visually stack a bow/tool with the gun.
         if (isCreateCyberneticsMob(mobId)) {
-            if (held.isEmpty() || !isPointBlankGun(held.getItem())) {
+            if (held.isEmpty() || !PointBlankReflection.isGun(held.getItem())) {
                 restoreCyberneticsGun(mob);
                 held = mob.getMainHandItem();
             }
-            if (!mob.getOffhandItem().isEmpty()) {
-                mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-            }
+            if (!mob.getOffhandItem().isEmpty()) mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
         }
 
-        if (held.isEmpty() || !isPointBlankGun(held.getItem())) {
+        if (held.isEmpty() || !PointBlankReflection.isGun(held.getItem())) {
             data.putBoolean(ARMED, false);
+            return;
+        }
+
+        ensureMagazine(held);
+
+        int reload = data.getInt(RELOAD_TICKS);
+        if (reload > 0) {
+            data.putInt(RELOAD_TICKS, reload - 1);
+            if (reload == 1) {
+                reloadMagazine(mob, held);
+            }
             return;
         }
 
@@ -95,6 +100,7 @@ public final class HostileGunEvents {
         if (target == null || !target.isAlive() || target == mob) {
             data.putInt(AIM_TARGET, -1);
             data.putInt(AIM_DELAY, 0);
+            data.putInt(BURST_LEFT, 0);
             return;
         }
 
@@ -112,6 +118,7 @@ public final class HostileGunEvents {
             data.putInt(AIM_TARGET, target.getId());
             data.putInt(AIM_DELAY, mob.getRandom().nextIntBetweenInclusive(
                     HostileGunsConfig.minAimDelayTicks, HostileGunsConfig.maxAimDelayTicks));
+            data.putInt(BURST_LEFT, 0);
             return;
         }
 
@@ -121,110 +128,127 @@ public final class HostileGunEvents {
             return;
         }
 
+        int burstCooldown = data.getInt(BURST_COOLDOWN);
+        if (burstCooldown > 0) {
+            data.putInt(BURST_COOLDOWN, burstCooldown - 1);
+            return;
+        }
+
+        int burstLeft = data.getInt(BURST_LEFT);
+        if (burstLeft > 0) {
+            if (fireWeapon(mob, target, held, distance)) {
+                data.putInt(BURST_LEFT, burstLeft - 1);
+                data.putInt(BURST_COOLDOWN, Math.max(1, chooseCooldown(mob, held)));
+            }
+            return;
+        }
+
         int cooldown = data.getInt(COOLDOWN);
         if (cooldown > 0) {
             data.putInt(COOLDOWN, cooldown - 1);
             return;
         }
 
-        fireWeapon(mob, target, held.getItem(), distance);
+        Object mode = PointBlankReflection.fireMode(held);
+        int ammo = PointBlankReflection.ammo(held, mode);
+        if (ammo <= 0) {
+            beginReload(mob, held);
+            return;
+        }
+
+        if (fireWeapon(mob, target, held, distance)) {
+            int burst = PointBlankReflection.burstShots(held, mode);
+            if (burst > 1) {
+                data.putInt(BURST_LEFT, burst - 1);
+                data.putInt(BURST_COOLDOWN, Math.max(1, chooseCooldown(mob, held)));
+            } else {
+                data.putInt(COOLDOWN, chooseCooldown(mob, held));
+            }
+        }
+    }
+
+    private static void ensureMagazine(ItemStack stack) {
+        if (stack.isEmpty() || !PointBlankReflection.isGun(stack.getItem())) return;
+        Object mode = PointBlankReflection.fireMode(stack);
+        if (mode == null) return;
+        int capacity = PointBlankReflection.maxAmmo(stack, mode);
+        if (capacity > 0 && PointBlankReflection.ammo(stack, mode) <= 0) {
+            PointBlankReflection.setAmmo(stack, mode, capacity);
+        }
+    }
+
+    private static void beginReload(Mob mob, ItemStack stack) {
+        var data = mob.getPersistentData();
+        if (data.getInt(RELOAD_TICKS) > 0) return;
+        int rpm = PointBlankReflection.rpm(stack.getItem());
+        int base = rpm > 0 ? Math.max(20, Math.min(50, (int)Math.round(1200.0D / rpm))) : 30;
+        data.putInt(RELOAD_TICKS, base + mob.getRandom().nextIntBetweenInclusive(10, 24));
+        data.putInt(BURST_LEFT, 0);
+        data.putInt(BURST_COOLDOWN, 0);
+    }
+
+    private static void reloadMagazine(Mob mob, ItemStack stack) {
+        Object mode = PointBlankReflection.fireMode(stack);
+        int capacity = PointBlankReflection.maxAmmo(stack, mode);
+        if (capacity > 0) PointBlankReflection.setAmmo(stack, mode, capacity);
+        mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        mob.getPersistentData().putInt(COOLDOWN, 3);
     }
 
     private static void restoreCyberneticsGun(Mob mob) {
-        var data = mob.getPersistentData();
-        String id = data.getString(GUN_ID);
+        String id = mob.getPersistentData().getString(GUN_ID);
         if (id.isEmpty()) return;
         ResourceLocation key = ResourceLocation.tryParse(id);
         if (key == null) return;
         Item gun = BuiltInRegistries.ITEM.get(key);
-        if (gun != null && isPointBlankGun(gun)) equip(mob, gun);
+        if (gun != null && PointBlankReflection.isGun(gun)) {
+            equip(mob, gun);
+            ensureMagazine(mob.getMainHandItem());
+        }
     }
 
     private static void equip(Mob mob, Item gun) {
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(gun));
-        ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
-        if (isCreateCyberneticsMob(mobId)) {
+        if (isCreateCyberneticsMob(BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()))) {
             mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
         }
         mob.setDropChance(EquipmentSlot.MAINHAND, 0.05F);
     }
 
-    private static void fireWeapon(Mob mob, LivingEntity target, Item gun, double distance) {
-        if (!(mob.level() instanceof ServerLevel level)) return;
-
-        WeaponBalance.Profile profile = WeaponBalance.profile(gun);
-        Vec3 eye = mob.getEyePosition();
-        Vec3 desired = target.getEyePosition().subtract(eye).normalize();
-
-        var data = mob.getPersistentData();
-        double mobSkill = data.contains(AIM_SKILL) ? data.getDouble(AIM_SKILL) : 1.1D;
+    private static boolean fireWeapon(Mob mob, LivingEntity target, ItemStack stack, double distance) {
+        WeaponBalance.Profile profile = WeaponBalance.profile(stack.getItem());
         double distanceFactor = 0.72D + Math.min(1.0D, distance / HostileGunsConfig.maxRange) * 0.72D;
         double randomFactor = 0.86D + mob.getRandom().nextDouble() * 0.28D;
-        double spreadRadians = Math.toRadians(profile.spreadDegrees()
-                * distanceFactor * mobSkill * HostileGunsConfig.accuracyMultiplier * randomFactor);
+        double spreadRadians = Math.toRadians(profile.spreadDegrees() * distanceFactor
+                * (dataDouble(mob, AIM_SKILL, 1.0D)) * HostileGunsConfig.accuracyMultiplier * randomFactor);
         double spread = Math.tan(spreadRadians);
 
-        Vec3 muzzleDirection = addSpread(desired, mob, spread);
-        Vec3 muzzle = eye.add(0.0D, -0.08D, 0.0D).add(muzzleDirection.scale(0.48D));
+        if (!PointBlankReflection.fire(mob, target, stack, spread)) return false;
 
-        if (HostileGunsConfig.muzzleFlashEffects) {
-            level.sendParticles(ParticleTypes.FLAME, muzzle.x, muzzle.y, muzzle.z,
-                    2, 0.018D, 0.018D, 0.018D, 0.003D);
-            level.sendParticles(ParticleTypes.SMOKE, muzzle.x, muzzle.y, muzzle.z,
-                    1, 0.015D, 0.015D, 0.015D, 0.002D);
-        }
-
-        SoundEvent fireSound = PointBlankReflection.fireSound(gun);
+        mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        ServerLevel level = (ServerLevel)mob.level();
+        Vec3 muzzle = mob.getEyePosition().add(mob.getLookAngle().scale(0.5D));
+        SoundEvent fireSound = PointBlankReflection.fireSound(stack.getItem());
         if (fireSound != null) {
             level.playSound(null, muzzle.x, muzzle.y, muzzle.z, fireSound, SoundSource.HOSTILE,
-                    Math.max(0.5F, PointBlankReflection.fireSoundVolume(gun)),
+                    PointBlankReflection.fireSoundVolume(stack.getItem()),
                     0.94F + mob.getRandom().nextFloat() * 0.12F);
-        } else {
-            level.playSound(null, muzzle.x, muzzle.y, muzzle.z, SoundEvents.CROSSBOW_SHOOT,
-                    SoundSource.HOSTILE, 0.75F, 0.90F + mob.getRandom().nextFloat() * 0.20F);
         }
-
-        int pellets = profile.pellets();
-        float pelletDamage = HostileGunsConfig.baseDamage * profile.damageMultiplier()
-                / (pellets > 1 ? 2.4F : 1.0F);
-
-        for (int i = 0; i < pellets; i++) {
-            double pelletSpread = pellets > 1 ? spread * 1.35D : spread;
-            Vec3 direction = addSpread(desired, mob, pelletSpread);
-            Vec3 origin = eye.add(0.0D, -0.08D, 0.0D).add(direction.scale(0.48D));
-            HostileBulletEntity bullet = new HostileBulletEntity(level, mob, origin,
-                    direction.scale(profile.projectileSpeed()), pelletDamage);
-            level.addFreshEntity(bullet);
-        }
-
-        mob.swing(InteractionHand.MAIN_HAND);
-        data.putInt(COOLDOWN, chooseCooldown(mob, gun, profile));
+        return true;
     }
 
-    private static Vec3 addSpread(Vec3 desired, Mob mob, double spread) {
-        Vec3 offset = new Vec3(
-                mob.getRandom().triangle(0.0D, spread),
-                mob.getRandom().triangle(0.0D, spread),
-                mob.getRandom().triangle(0.0D, spread)
-        );
-        return desired.add(offset).normalize();
+    private static double dataDouble(Mob mob, String key, double fallback) {
+        return mob.getPersistentData().contains(key) ? mob.getPersistentData().getDouble(key) : fallback;
     }
 
-    private static int chooseCooldown(Mob mob, Item gun, WeaponBalance.Profile profile) {
-        int min = profile.minCooldown();
-        int max = profile.maxCooldown();
-
+    private static int chooseCooldown(Mob mob, Item gun) {
         int rpm = PointBlankReflection.rpm(gun);
         if (rpm > 0) {
-            int idealTicks = (int) Math.round(1200.0D / rpm);
-            idealTicks = Math.max(3, Math.min(50, idealTicks));
-            min = Math.max(3, (int) Math.round(idealTicks * 0.82D));
-            max = Math.max(min, (int) Math.round(idealTicks * 1.28D));
+            int ideal = Math.max(3, Math.min(50, (int)Math.round(1200.0D / rpm)));
+            int chosen = (int)Math.round(ideal * (0.82D + mob.getRandom().nextDouble() * 0.46D));
+            return Math.max(3, chosen);
         }
-
-        int chosen = mob.getRandom().nextIntBetweenInclusive(min, max);
-        if (mob.getRandom().nextFloat() < 0.08F) chosen += mob.getRandom().nextIntBetweenInclusive(2, 7);
-        return chosen;
+        return mob.getRandom().nextIntBetweenInclusive(6, 18);
     }
 
     private static boolean eligibleType(Mob mob, ResourceLocation id) {
@@ -239,15 +263,5 @@ public final class HostileGunEvents {
             case "cyberzombie", "cyberskeleton", "punklin", "pigstrom", "hogboy" -> true;
             default -> false;
         };
-    }
-
-    private static boolean isPointBlankGun(Item item) {
-        try {
-            Class<?> gunClass = Class.forName("com.vicmatskiv.pointblank.item.GunItem", false,
-                    PointBlankGunPool.class.getClassLoader());
-            return gunClass.isInstance(item);
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 }

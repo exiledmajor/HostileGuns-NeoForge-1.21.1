@@ -138,7 +138,7 @@ public final class HostileGunEvents {
         if (burstLeft > 0) {
             if (fireWeapon(mob, target, held, distance)) {
                 data.putInt(BURST_LEFT, burstLeft - 1);
-                data.putInt(BURST_COOLDOWN, Math.max(1, chooseCooldown(mob, held)));
+                data.putInt(BURST_COOLDOWN, Math.max(1, chooseCooldown(mob, held.getItem())));
             }
             return;
         }

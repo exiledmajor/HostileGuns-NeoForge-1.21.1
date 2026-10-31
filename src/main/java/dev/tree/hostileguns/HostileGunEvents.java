@@ -73,9 +73,17 @@ public final class HostileGunEvents {
         ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
         ItemStack held = mob.getMainHandItem();
 
-        if ((held.isEmpty() || !isPointBlankGun(held.getItem())) && isCreateCyberneticsMob(mobId)) {
-            restoreCyberneticsGun(mob);
-            held = mob.getMainHandItem();
+        // Create: Cybernetics mobs can re-equip their native weapon after we arm them.
+        // The assigned Point Blank gun always wins, and the offhand is cleared so models
+        // such as the cyberskeleton cannot visually stack a bow/tool with the gun.
+        if (isCreateCyberneticsMob(mobId)) {
+            if (held.isEmpty() || !isPointBlankGun(held.getItem())) {
+                restoreCyberneticsGun(mob);
+                held = mob.getMainHandItem();
+            }
+            if (!mob.getOffhandItem().isEmpty()) {
+                mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+            }
         }
 
         if (held.isEmpty() || !isPointBlankGun(held.getItem())) {
@@ -134,6 +142,10 @@ public final class HostileGunEvents {
 
     private static void equip(Mob mob, Item gun) {
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(gun));
+        ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
+        if (isCreateCyberneticsMob(mobId)) {
+            mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+        }
         mob.setDropChance(EquipmentSlot.MAINHAND, 0.05F);
     }
 

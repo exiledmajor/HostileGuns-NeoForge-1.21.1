@@ -1,6 +1,5 @@
 package dev.tree.hostileguns;
 
-import dev.tree.hostileguns.client.PointBlankClientEffects;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -18,7 +17,6 @@ import net.minecraft.world.phys.Vec3;
 public class HostileBulletEntity extends Snowball {
     private static final int MAX_LIFETIME = 80;
     private float shotDamage = 4.0F;
-    private boolean clientEffectsLaunched;
 
     public HostileBulletEntity(EntityType<? extends HostileBulletEntity> type, Level level) {
         super(type, level);
@@ -42,19 +40,6 @@ public class HostileBulletEntity extends Snowball {
 
     @Override
     public void tick() {
-        if (level().isClientSide && !clientEffectsLaunched) {
-            clientEffectsLaunched = true;
-            Entity owner = getOwner();
-            if (owner instanceof LivingEntity shooter) {
-                ItemStack gun = shooter.getMainHandItem();
-                boolean launched = PointBlankClientEffects.launch(
-                        shooter, gun, getDeltaMovement(), HostileGunsConfig.maxRange);
-                if (launched) {
-                    setInvisible(true);
-                }
-            }
-        }
-
         super.tick();
 
         if (level().isClientSide && !isRemoved() && HostileGunsConfig.tracerEffects && !isInvisible()) {

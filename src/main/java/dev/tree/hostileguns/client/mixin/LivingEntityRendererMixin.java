@@ -8,6 +8,7 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.registries.BuiltInRegistries;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -27,7 +28,12 @@ public abstract class LivingEntityRendererMixin {
         poseStack.pushPose();
         // Create: Cybernetics' cyberzombie renderer does not expose the normal vanilla
         // held-item layer. Mount the Point Blank renderer at the right-hand position.
-        poseStack.translate(0.34D, 1.08D, 0.10D);
+        var itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        String path = itemId == null ? "" : itemId.getPath().toLowerCase(java.util.Locale.ROOT);
+        boolean sidearm = path.contains("pistol") || path.contains("handgun") || path.contains("revolver");
+        // Humanoid right arms pivot on the negative-X side of the model. The previous
+        // positive-X offset placed the gun across the torso/near the opposite hand.
+        poseStack.translate(-0.30D, sidearm ? 1.22D : 1.16D, 0.04D);
         mc.getItemRenderer().renderStatic(entity, stack, ItemDisplayContext.THIRD_PERSON_RIGHT_HAND,
                 false, poseStack, buffer, entity.level(), packedLight, 0, entity.getId());
         poseStack.popPose();

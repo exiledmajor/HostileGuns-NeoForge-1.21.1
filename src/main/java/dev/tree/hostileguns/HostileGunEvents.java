@@ -112,7 +112,17 @@ public final class HostileGunEvents {
             return;
         }
 
-        mob.getLookControl().setLookAt(target, 24.0F, 24.0F);
+        // Keep the body, head and view vector aligned. LookControl alone only turns
+        // the head on many mobs, which leaves the weapon firing along the old body yaw.
+        Vec3 aim = target.getEyePosition().subtract(mob.getEyePosition());
+        double horizontalAim = Math.sqrt(aim.x * aim.x + aim.z * aim.z);
+        float aimYaw = (float)(Math.toDegrees(Math.atan2(-aim.x, aim.z)));
+        float aimPitch = (float)(-Math.toDegrees(Math.atan2(aim.y, horizontalAim)));
+        mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+        mob.setYRot(aimYaw);
+        mob.yBodyRot = aimYaw;
+        mob.yHeadRot = aimYaw;
+        mob.setXRot(aimPitch);
 
         if (data.getInt(AIM_TARGET) != target.getId()) {
             data.putInt(AIM_TARGET, target.getId());
@@ -228,7 +238,10 @@ public final class HostileGunEvents {
                 * (dataDouble(mob, AIM_SKILL, 1.0D)) * HostileGunsConfig.accuracyMultiplier * randomFactor);
         double spread = Math.tan(spreadRadians);
 
-        if (!PointBlankReflection.fire(mob, target, stack, spread)) return false;
+        boolean pointBlankFired = PointBlankReflection.fire(mob, target, stack, spread);
+        if (!pointBlankFired && !fireFallbackProjectile(mob, target, stack, spread, profile)) {
+            return false;
+        }
 
         mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         ServerLevel level = (ServerLevel)mob.level();
@@ -239,6 +252,34 @@ public final class HostileGunEvents {
                     PointBlankReflection.fireSoundVolume(stack.getItem()),
                     0.94F + mob.getRandom().nextFloat() * 0.12F);
         }
+        return true;
+    }
+
+    /**
+     * Last-resort server-authoritative shot. Point Blank's projectile/hitscan APIs
+     * differ between weapon implementations; if their reflective entry point is
+     * unavailable, do not silently turn an armed mob into a non-firing mob.
+     */
+    private static boolean fireFallbackProjectile(Mob mob, LivingEntity target, ItemStack stack,
+                                                  double spread, WeaponBalance.Profile profile) {
+        if (!(mob.level() instanceof ServerLevel level)) return false;
+        Object mode = PointBlankReflection.fireMode(stack);
+        int ammo = PointBlankReflection.ammo(stack, mode);
+        int capacity = PointBlankReflection.maxAmmo(stack, mode);
+        if (mode == null || ammo <= 0 || capacity <= 0) return false;
+
+        Vec3 direction = target.getEyePosition().subtract(mob.getEyePosition()).normalize();
+        direction = direction.add(
+                mob.getRandom().triangle(0.0D, spread),
+                mob.getRandom().triangle(0.0D, spread),
+                mob.getRandom().triangle(0.0D, spread)).normalize();
+        Vec3 muzzle = mob.getEyePosition().add(direction.scale(0.45D));
+        float damage = HostileGunsConfig.baseDamage * profile.damageMultiplier();
+        Vec3 velocity = direction.scale(profile.projectileSpeed());
+        HostileBulletEntity bullet = new HostileBulletEntity(level, mob, muzzle, velocity, damage);
+        if (!level.addFreshEntity(bullet)) return false;
+
+        PointBlankReflection.setAmmo(stack, mode, ammo - 1);
         return true;
     }
 

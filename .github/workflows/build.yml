@@ -32,8 +32,3 @@ jobs:
         with:
           name: Mainframe-Progression-Bridge-NeoForge-1.21.1
           path: progressionbridge/build/libs/*.jar
-      - name: Upload PulseHUD NeoForge
-        uses: actions/upload-artifact@v4
-        with:
-          name: PulseHUD-NeoForge-1.21.1
-          path: pulsehudneoforge/build/libs/*.jar

@@ -158,7 +158,7 @@ public final class PointBlankReflection {
                     long.class, Predicate.class, Predicate.class, List.class);
             List<?> hits = (List<?>)ray.invoke(null, shooter, shooter.getEyePosition(), direction,
                     0.0F, Math.min(100, range), pellets, pelletSpread + spread,
-                    shooter.getRandom().nextLong(), (Predicate<Object>)b -> false, (Predicate<Object>)b -> false,
+                    shooter.getRandom().nextLong(), (Predicate<Object>)b -> true, (Predicate<Object>)b -> true,
                     new java.util.ArrayList<>());
             if (hits == null) return false;
 
@@ -174,13 +174,16 @@ public final class PointBlankReflection {
                 }
             }
 
+            boolean appliedDamage = false;
             for (Object hit : hits) {
                 if (!(hit instanceof EntityHitResult entityHit)) continue;
                 if (hurt == null) return false;
                 hurt.invoke(stack.getItem(), shooter, entityHit, null, stack);
+                appliedDamage = true;
             }
-            // A valid ray query is a fired hitscan even when it finds no entity.
-            return true;
+            // An empty or non-entity result is not proof that a shot was fired.
+            // Let HostileGunEvents use its visible server-side projectile fallback.
+            return appliedDamage;
         } catch (Throwable ignored) {
             return false;
         }

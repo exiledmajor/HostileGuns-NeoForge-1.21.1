@@ -101,29 +101,54 @@ public final class PointBlankReflection {
             direction = addSpread(shooter, direction, spread);
             Vec3 muzzle = eye.add(0.0D, -0.08D, 0.48D);
 
-            Object ammo = firstProjectileAmmo(stack, mode);
-            if (ammo != null) {
-                Object projectile = ammo.getClass()
+            Object projectileAmmo = firstProjectileAmmo(stack, mode);
+            boolean fired;
+            if (projectileAmmo != null) {
+                Object projectile = projectileAmmo.getClass()
                         .getMethod("createProjectile", LivingEntity.class, double.class, double.class, double.class)
-                        .invoke(ammo, shooter, muzzle.x, muzzle.y, muzzle.z);
+                        .invoke(projectileAmmo, shooter, muzzle.x, muzzle.y, muzzle.z);
                 projectile.getClass().getMethod("launchAtLookTarget", LivingEntity.class, double.class, long.class)
                         .invoke(projectile, shooter, spread, shooter.getRandom().nextLong());
-                if (shooter.level() instanceof ServerLevel level) level.addFreshEntity((net.minecraft.world.entity.Entity)projectile);
+                fired = projectile instanceof net.minecraft.world.entity.Entity entity
+                        && shooter.level() instanceof ServerLevel level
+                        && level.addFreshEntity(entity);
             } else {
-                fireHitscan(shooter, stack, spread, direction);
+                fired = fireHitscan(shooter, stack, spread, direction);
             }
 
+            // Never consume ammunition or report a shot when Point Blank's firing
+            // pipeline failed. HostileGunEvents can then use its server projectile fallback.
+            if (!fired) return false;
             if (capacity < Integer.MAX_VALUE) setAmmo(stack, mode, current - 1);
             return true;
-        } catch (Throwable ignored) { return false; }
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
-    private static void fireHitscan(LivingEntity shooter, ItemStack stack, double spread, Vec3 direction) {
+    /**
+     * Server-safe Point Blank hitscan. Do not resolve GunClientState by name:
+     * it lives in Point Blank's client package and is absent on dedicated servers.
+     * The fire-mode helper accepts a null client state for NPC firing.
+     */
+    private static boolean fireHitscan(LivingEntity shooter, ItemStack stack, double spread, Vec3 direction) {
         try {
             Class<?> feature = Class.forName(FIREMODE);
-            Class<?> stateClass = Class.forName("com.vicmatskiv.pointblank.client.GunClientState");
-            Object pcs = feature.getMethod("getPelletCountAndSpread", LivingEntity.class, stateClass, ItemStack.class)
-                    .invoke(null, shooter, null, stack);
+            Method pelletMethod = null;
+            for (Method method : feature.getMethods()) {
+                Class<?>[] params = method.getParameterTypes();
+                if (method.getName().equals("getPelletCountAndSpread")
+                        && params.length == 3
+                        && LivingEntity.class.isAssignableFrom(params[0])
+                        && params[2].isAssignableFrom(ItemStack.class)) {
+                    pelletMethod = method;
+                    break;
+                }
+            }
+            if (pelletMethod == null) return false;
+
+            Object pcs = pelletMethod.invoke(null, shooter, null, stack);
+            if (pcs == null) return false;
             int pellets = Math.max(1, ((Number)pcs.getClass().getMethod("getFirst").invoke(pcs)).intValue());
             double pelletSpread = ((Number)pcs.getClass().getMethod("getSecond").invoke(pcs)).doubleValue();
             int range = ((Number)feature.getMethod("getMaxShootingDistance", ItemStack.class).invoke(null, stack)).intValue();
@@ -135,14 +160,30 @@ public final class PointBlankReflection {
                     0.0F, Math.min(100, range), pellets, pelletSpread + spread,
                     shooter.getRandom().nextLong(), (Predicate<Object>)b -> false, (Predicate<Object>)b -> false,
                     new java.util.ArrayList<>());
+            if (hits == null) return false;
 
             Method hurt = null;
-            for (Method m : stack.getItem().getClass().getMethods()) {
-                if (m.getName().equals("hurtEntity") && m.getParameterCount() == 4) { hurt = m; break; }
+            for (Method method : stack.getItem().getClass().getMethods()) {
+                if (!method.getName().equals("hurtEntity") || method.getParameterCount() != 4) continue;
+                Class<?>[] params = method.getParameterTypes();
+                if (params[0].isAssignableFrom(shooter.getClass())
+                        && params[1].isAssignableFrom(EntityHitResult.class)
+                        && params[3].isAssignableFrom(ItemStack.class)) {
+                    hurt = method;
+                    break;
+                }
             }
-            if (hurt != null) for (Object hit : hits)
-                if (hit instanceof EntityHitResult entityHit) hurt.invoke(stack.getItem(), shooter, entityHit, null, stack);
-        } catch (Throwable ignored) {}
+
+            for (Object hit : hits) {
+                if (!(hit instanceof EntityHitResult entityHit)) continue;
+                if (hurt == null) return false;
+                hurt.invoke(stack.getItem(), shooter, entityHit, null, stack);
+            }
+            // A valid ray query is a fired hitscan even when it finds no entity.
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static Vec3 addSpread(LivingEntity shooter, Vec3 direction, double spread) {

@@ -72,14 +72,6 @@ public final class HostileGunEvents {
         ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
         ItemStack held = mob.getMainHandItem();
 
-        if (isCreateCyberneticsMob(mobId)) {
-            if (held.isEmpty() || !PointBlankReflection.isGun(held.getItem())) {
-                restoreCyberneticsGun(mob);
-                held = mob.getMainHandItem();
-            }
-            if (!mob.getOffhandItem().isEmpty()) mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-        }
-
         if (held.isEmpty() || !PointBlankReflection.isGun(held.getItem())) {
             data.putBoolean(ARMED, false);
             return;
@@ -210,23 +202,8 @@ public final class HostileGunEvents {
         mob.getPersistentData().putInt(COOLDOWN, 3);
     }
 
-    private static void restoreCyberneticsGun(Mob mob) {
-        String id = mob.getPersistentData().getString(GUN_ID);
-        if (id.isEmpty()) return;
-        ResourceLocation key = ResourceLocation.tryParse(id);
-        if (key == null) return;
-        Item gun = BuiltInRegistries.ITEM.get(key);
-        if (gun != null && PointBlankReflection.isGun(gun)) {
-            equip(mob, gun);
-            ensureMagazine(mob.getMainHandItem());
-        }
-    }
-
     private static void equip(Mob mob, Item gun) {
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(gun));
-        if (isCreateCyberneticsMob(BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()))) {
-            mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-        }
         mob.setDropChance(EquipmentSlot.MAINHAND, 0.05F);
     }
 
@@ -298,16 +275,12 @@ public final class HostileGunEvents {
     }
 
     private static boolean eligibleType(Mob mob, ResourceLocation id) {
+        // Create: Cybernetics mobs retain their native AI and natural spawning;
+        // they are deliberately excluded from this mod's gun assignment.
+        if ("createcybernetics".equals(id.getNamespace())) return false;
         if (HostileGunsConfig.excludedEntities.contains(id.toString())) return false;
         if (!HostileGunsConfig.allowModdedHostiles && !"minecraft".equals(id.getNamespace())) return false;
         return mob.getType().getCategory() == MobCategory.MONSTER || mob instanceof Monster;
     }
 
-    private static boolean isCreateCyberneticsMob(ResourceLocation id) {
-        if (id == null || !"createcybernetics".equals(id.getNamespace())) return false;
-        return switch (id.getPath()) {
-            case "cyberzombie", "cyberskeleton", "punklin", "pigstrom", "hogboy" -> true;
-            default -> false;
-        };
-    }
 }

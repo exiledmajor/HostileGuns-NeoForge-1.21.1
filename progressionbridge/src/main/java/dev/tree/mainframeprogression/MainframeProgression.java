@@ -15,6 +15,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityAttributeModificationEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -47,6 +48,7 @@ public final class MainframeProgression {
         NeoForge.EVENT_BUS.addListener(MainframeProgression::playerTick);
         NeoForge.EVENT_BUS.addListener(MainframeProgression::livingDeath);
         NeoForge.EVENT_BUS.addListener(MainframeProgression::removeCyberneticsMobDrops);
+        NeoForge.EVENT_BUS.addListener(MainframeProgression::blockRipperdocSpawn);
     }
 
     private static void addCreativeItems(BuildCreativeModeTabContentsEvent event) {
@@ -75,6 +77,14 @@ public final class MainframeProgression {
     }
 
     private static final String MOD_CREATE_CYBERNETICS = "createcybernetics";
+
+    private static void blockRipperdocSpawn(EntityJoinLevelEvent event) {
+        var id = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntity().getType());
+        if (id != null && MOD_CREATE_CYBERNETICS.equals(id.getNamespace())
+                && "ripper".equals(id.getPath())) {
+            event.setCanceled(true);
+        }
+    }
 
     private static void livingDeath(LivingDeathEvent event) {
         if (event.isCanceled() || event.getEntity().level().isClientSide()) return;

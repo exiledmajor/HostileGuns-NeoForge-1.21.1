@@ -14,6 +14,8 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityAttributeModificationEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -44,6 +46,7 @@ public final class MainframeProgression {
         ProgressionPreset.installOnce();
         NeoForge.EVENT_BUS.addListener(MainframeProgression::playerTick);
         NeoForge.EVENT_BUS.addListener(MainframeProgression::livingDeath);
+        NeoForge.EVENT_BUS.addListener(MainframeProgression::removeCyberneticsMobDrops);
     }
 
     private static void addCreativeItems(BuildCreativeModeTabContentsEvent event) {
@@ -61,6 +64,17 @@ public final class MainframeProgression {
         double versatility = player.getAttributeValue(CYBERWARE_VERSATILITY);
         ChromewareBridge.tick(player, (int)Math.round(versatility));
     }
+
+    private static void removeCyberneticsMobDrops(LivingDropsEvent event) {
+        if (event.getEntity().level().isClientSide()) return;
+        var id = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntity().getType());
+        if (id != null && MOD_CREATE_CYBERNETICS.equals(id.getNamespace())) {
+            // Keep the native mob, its AI, equipment and XP; suppress item drops only.
+            event.getDrops().clear();
+        }
+    }
+
+    private static final String MOD_CREATE_CYBERNETICS = "createcybernetics";
 
     private static void livingDeath(LivingDeathEvent event) {
         if (event.isCanceled() || event.getEntity().level().isClientSide()) return;

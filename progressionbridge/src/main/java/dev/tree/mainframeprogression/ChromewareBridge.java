@@ -340,7 +340,12 @@ public final class ChromewareBridge {
         for (ItemStack stack : installedCyberware(player)) {
             double before = wear(player, stack);
             if (before <= 0.0D) continue;
-            repairWear(player, stack, amount);
+            // Higher-capacity implants are more durable but require proportionally
+            // more repair material/time. Keep the base kit value at 0.25 for a
+            // 20-capacity implant and scale down for more expensive hardware.
+            double costFactor = Math.sqrt(20.0D / Math.max(1, capacity(stack)));
+            double implantRepair = Math.min(1.0D, amount) * costFactor;
+            repairWear(player, stack, implantRepair);
             if (wear(player, stack) < before) repaired++;
         }
         return repaired;

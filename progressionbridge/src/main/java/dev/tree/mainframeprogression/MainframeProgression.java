@@ -16,6 +16,8 @@ import net.neoforged.neoforge.event.entity.EntityAttributeModificationEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -49,6 +51,8 @@ public final class MainframeProgression {
         NeoForge.EVENT_BUS.addListener(MainframeProgression::livingDeath);
         NeoForge.EVENT_BUS.addListener(MainframeProgression::removeCyberneticsMobDrops);
         NeoForge.EVENT_BUS.addListener(MainframeProgression::blockRipperdocSpawn);
+        NeoForge.EVENT_BUS.addListener(MainframeProgression::blockCyberneticsItemUse);
+        NeoForge.EVENT_BUS.addListener(MainframeProgression::blockCyberneticsBlockPlacement);
     }
 
     private static void addCreativeItems(BuildCreativeModeTabContentsEvent event) {
@@ -77,6 +81,16 @@ public final class MainframeProgression {
     }
 
     private static final String MOD_CREATE_CYBERNETICS = "createcybernetics";
+
+    private static void blockCyberneticsItemUse(PlayerInteractEvent.RightClickItem event) {
+        var id = BuiltInRegistries.ITEM.getKey(event.getItemStack().getItem());
+        if (id != null && MOD_CREATE_CYBERNETICS.equals(id.getNamespace())) event.setCanceled(true);
+    }
+
+    private static void blockCyberneticsBlockPlacement(BlockEvent.EntityPlaceEvent event) {
+        var id = BuiltInRegistries.BLOCK.getKey(event.getPlacedBlock().getBlock());
+        if (id != null && MOD_CREATE_CYBERNETICS.equals(id.getNamespace())) event.setCanceled(true);
+    }
 
     private static void blockRipperdocSpawn(EntityJoinLevelEvent event) {
         var id = BuiltInRegistries.ENTITY_TYPE.getKey(event.getEntity().getType());

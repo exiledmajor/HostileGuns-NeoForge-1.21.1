@@ -118,12 +118,21 @@ public final class ChromewareBridge {
             int previousActive = tag.getInt("mainframe_sandevistan_active");
             tag.putInt("mainframe_sandevistan_active", active);
 
+            Class<?> stateClass = Class.forName("com.chromeware.cyberware.SandevistanState");
             if (previousActive <= 0 && active > 0) {
+                // The cooldown is not started at activation. Extend the active
+                // duration here, but leave the cooldown field untouched.
                 int extended = (int)Math.ceil(active * durationBonus((int)Math.round(
                         player.getAttributeValue(MainframeProgression.CYBERWARE_VERSATILITY))));
-                int reducedCooldown = (int)Math.round(cooldown * (1.0D - reduction));
-                Class<?> stateClass = Class.forName("com.chromeware.cyberware.SandevistanState");
-                Object next = stateClass.getConstructor(int.class, int.class).newInstance(active + extended, reducedCooldown);
+                Object next = stateClass.getConstructor(int.class, int.class)
+                        .newInstance(active + extended, cooldown);
+                player.setData((Supplier)supplier, next);
+            } else if (previousActive > 0 && active <= 0 && cooldown > 0) {
+                // Chromeware starts the Sandevistan cooldown when the active
+                // state ends. Apply Versatility at that transition, not at activation.
+                int reducedCooldown = Math.max(1, (int)Math.round(cooldown * (1.0D - reduction)));
+                Object next = stateClass.getConstructor(int.class, int.class)
+                        .newInstance(active, reducedCooldown);
                 player.setData((Supplier)supplier, next);
             }
         } catch (Throwable ignored) {}

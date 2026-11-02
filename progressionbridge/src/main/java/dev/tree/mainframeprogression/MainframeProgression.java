@@ -63,10 +63,15 @@ public final class MainframeProgression {
     private static void filterCyberneticsCreativeItems(BuildCreativeModeTabContentsEvent event) {
         // Keep Create: Cybernetics' mob entities available through natural spawning,
         // but remove its non-mob items from every creative tab.
-        event.removeIf(stack -> {
-            var id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-            return id != null && MOD_CREATE_CYBERNETICS.equals(id.getNamespace());
-        }, net.minecraft.world.item.CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS);
+        var hidden = java.util.stream.Stream.concat(
+                event.getParentEntries().stream(), event.getSearchEntries().stream())
+                .filter(stack -> {
+                    var id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                    return id != null && MOD_CREATE_CYBERNETICS.equals(id.getNamespace());
+                }).distinct().toList();
+        for (var stack : hidden) {
+            event.remove(stack, net.minecraft.world.item.CreativeModeTab.TabVisibility.PARENT_AND_SEARCH_TABS);
+        }
     }
 
     private static void modifyAttributes(EntityAttributeModificationEvent event) {

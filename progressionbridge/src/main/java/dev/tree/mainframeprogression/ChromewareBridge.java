@@ -118,12 +118,21 @@ public final class ChromewareBridge {
             int previousActive = tag.getInt("mainframe_sandevistan_active");
             tag.putInt("mainframe_sandevistan_active", active);
 
+            Class<?> stateClass = Class.forName("com.chromeware.cyberware.SandevistanState");
             if (previousActive <= 0 && active > 0) {
+                // The cooldown is not started at activation. Extend the active
+                // duration here, but leave the cooldown field untouched.
                 int extended = (int)Math.ceil(active * durationBonus((int)Math.round(
                         player.getAttributeValue(MainframeProgression.CYBERWARE_VERSATILITY))));
-                int reducedCooldown = (int)Math.round(cooldown * (1.0D - reduction));
-                Class<?> stateClass = Class.forName("com.chromeware.cyberware.SandevistanState");
-                Object next = stateClass.getConstructor(int.class, int.class).newInstance(active + extended, reducedCooldown);
+                Object next = stateClass.getConstructor(int.class, int.class)
+                        .newInstance(active + extended, cooldown);
+                player.setData((Supplier)supplier, next);
+            } else if (previousActive > 0 && active <= 0 && cooldown > 0) {
+                // Chromeware starts the Sandevistan cooldown when the active
+                // state ends. Apply Versatility at that transition, not at activation.
+                int reducedCooldown = Math.max(1, (int)Math.round(cooldown * (1.0D - reduction)));
+                Object next = stateClass.getConstructor(int.class, int.class)
+                        .newInstance(active, reducedCooldown);
                 player.setData((Supplier)supplier, next);
             }
         } catch (Throwable ignored) {}
@@ -340,7 +349,12 @@ public final class ChromewareBridge {
         for (ItemStack stack : installedCyberware(player)) {
             double before = wear(player, stack);
             if (before <= 0.0D) continue;
-            repairWear(player, stack, amount);
+            // Higher-capacity implants are more durable but require proportionally
+            // more repair material/time. Keep the base kit value at 0.25 for a
+            // 20-capacity implant and scale down for more expensive hardware.
+            double costFactor = Math.sqrt(20.0D / Math.max(1, capacity(stack)));
+            double implantRepair = Math.min(1.0D, amount) * costFactor;
+            repairWear(player, stack, implantRepair);
             if (wear(player, stack) < before) repaired++;
         }
         return repaired;

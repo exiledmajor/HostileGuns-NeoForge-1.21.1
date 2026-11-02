@@ -45,6 +45,7 @@ public final class MainframeProgression {
         ATTRIBUTES.register(modBus);
         ITEMS.register(modBus);
         modBus.addListener(MainframeProgression::addCreativeItems);
+        modBus.addListener(MainframeProgression::filterCyberneticsCreativeItems);
         modBus.addListener(MainframeProgression::modifyAttributes);
         ProgressionPreset.installOnce();
         NeoForge.EVENT_BUS.addListener(MainframeProgression::playerTick);
@@ -57,6 +58,15 @@ public final class MainframeProgression {
 
     private static void addCreativeItems(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) event.accept(CYBERWARE_REPAIR_KIT.get());
+    }
+
+    private static void filterCyberneticsCreativeItems(BuildCreativeModeTabContentsEvent event) {
+        // Keep Create: Cybernetics' mob entities available through natural spawning,
+        // but remove its non-mob items from every creative tab.
+        event.getEntries().keySet().removeIf(stack -> {
+            var id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            return id != null && MOD_CREATE_CYBERNETICS.equals(id.getNamespace());
+        });
     }
 
     private static void modifyAttributes(EntityAttributeModificationEvent event) {

@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Predicate;
@@ -30,15 +31,21 @@ public final class PointBlankReflection {
     }
 
     public static Object fireMode(ItemStack stack) {
-        try { return gunClass().getMethod("getFireModeInstance", ItemStack.class).invoke(null, stack); }
-        catch (Throwable ignored) { return null; }
+        try {
+            Method method = gunClass().getMethod("getFireModeInstance", ItemStack.class);
+            Object receiver = Modifier.isStatic(method.getModifiers()) ? null : stack.getItem();
+            return method.invoke(receiver, stack);
+        } catch (Throwable ignored) { return null; }
     }
 
     public static int ammo(ItemStack stack, Object fireMode) {
         if (fireMode == null) return 0;
         try {
             for (Method m : gunClass().getMethods()) {
-                if (m.getName().equals("getAmmo") && m.getParameterCount() == 2) return ((Number)m.invoke(null, stack, fireMode)).intValue();
+                if (m.getName().equals("getAmmo") && m.getParameterCount() == 2) {
+                    Object receiver = Modifier.isStatic(m.getModifiers()) ? null : stack.getItem();
+                    return ((Number)m.invoke(receiver, stack, fireMode)).intValue();
+                }
             }
         } catch (Throwable ignored) {}
         return 0;
@@ -49,7 +56,8 @@ public final class PointBlankReflection {
         try {
             for (Method m : gunClass().getMethods()) {
                 if (m.getName().equals("setAmmo") && m.getParameterCount() == 3) {
-                    m.invoke(null, stack, fireMode, ammo);
+                    Object receiver = Modifier.isStatic(m.getModifiers()) ? null : stack.getItem();
+                    m.invoke(receiver, stack, fireMode, ammo);
                     return;
                 }
             }

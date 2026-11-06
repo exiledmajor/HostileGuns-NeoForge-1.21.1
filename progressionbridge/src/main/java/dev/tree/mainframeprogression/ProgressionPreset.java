@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 
 public final class ProgressionPreset {
     private static final String MARKER = "mainframe_progression_preset_v3.marker";
+    private static final String REMNANTS_MARKER = "mainframe_remnants_31.marker";
 
     private ProgressionPreset() {}
 
@@ -44,12 +45,12 @@ public final class ProgressionPreset {
         Files.writeString(attr, """
                 {
                   "display_name": "Cyberware Versatility : ",
-                  "description": "Each Versatility point adds 1 Chromeware capacity, reduces cyberware cooldowns, and slightly extends duration-based cyberware. It is a premium stat: two RAS upgrade points buy one Versatility point.",
+                  "description": "Each Versatility point adds 1 Chromeware capacity. Cooldowns and active durations remain controlled by Chromeware. It is a premium stat: two RAS upgrade points buy one Versatility point.",
                   "cmd_to_exc": [
                     "/attribute @s mainframe_progression:cyberware_versatility base set [param(1.0)]"
                   ],
                   "on_level_event": "",
-                  "tip_to_display": "§7Premium chrome stat. Capacity +1, cooldown -0.35%, duration +0.15% per point. Two RAS points per Versatility.",
+                  "tip_to_display": "§7Premium chrome stat. Capacity +1 per point; cooldowns and durations are not modified. Two RAS points per Versatility.",
                   "init_val_attribute": 0.0,
                   "max_level": 250.0,
                   "base_value_per_point": 0.5,
@@ -92,6 +93,19 @@ public final class ProgressionPreset {
             text = replaceString(text, "gui_shadow_color", "#B57BEB");
             Files.writeString(stats, text, StandardCharsets.UTF_8);
         }
+    }
+
+    private static void updateVersatilityDescription(Path config) throws IOException {
+        Path attr = config.resolve("ras").resolve("attributes").resolve("attribute_9.json");
+        if (!Files.exists(attr)) return;
+        String text = Files.readString(attr, StandardCharsets.UTF_8);
+        text = text.replace(
+                "Each Versatility point adds 1 Chromeware capacity, reduces cyberware cooldowns, and slightly extends duration-based cyberware.",
+                "Each Versatility point adds 1 Chromeware capacity. Cooldowns and active durations remain controlled by Chromeware.");
+        text = text.replace(
+                "Capacity +1, cooldown -0.35%, duration +0.15% per point.",
+                "Capacity +1 per point; cooldowns and durations are not modified.");
+        Files.writeString(attr, text, StandardCharsets.UTF_8);
     }
 
     private static void tuneRemnants(Path config) throws IOException {

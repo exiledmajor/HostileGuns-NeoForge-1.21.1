@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="CC0-1.0"
+
+[[mods]]
+modId="cybernetics_suppressor"
+version="1.0.0"
+displayName="Mainframe Cybernetics Content Suppressor"
+authors="Tree + OpenAI"
+description='''
+Suppresses Create: Cybernetics non-mob content for Mainframe while preserving its registered mobs,
+natural spawning, AI, equipment, abilities, and XP behavior.
+'''
+
+[[dependencies.cybernetics_suppressor]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.cybernetics_suppressor]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.cybernetics_suppressor]]
+modId="createcybernetics"
+type="required"
+versionRange="[0.5.2,)"
+ordering="AFTER"
+side="BOTH"

@@ -26,7 +26,7 @@ public final class ProgressionPreset {
                 tuneRas(config);
                 installCyberpunkUi(config);
                 Files.writeString(marker,
-                        "Mainframe progression preset applied once. Delete this file to reapply defaults.\\n",
+                        "Mainframe progression preset applied once. Delete this file to reapply defaults.\n",
                         StandardCharsets.UTF_8);
             } else {
                 updateVersatilityDescription(config);
@@ -36,7 +36,7 @@ public final class ProgressionPreset {
             if (!Files.exists(remnantsMarker)) {
                 tuneRemnants(config);
                 Files.writeString(remnantsMarker,
-                        "Remnants 3.1+ progression tuning applied once.\\n",
+                        "Remnants 3.1+ progression tuning applied once.\n",
                         StandardCharsets.UTF_8);
             }
         } catch (IOException ignored) {

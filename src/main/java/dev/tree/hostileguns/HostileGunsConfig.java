@@ -15,7 +15,7 @@ import java.util.Set;
 public final class HostileGunsConfig {
     private HostileGunsConfig() {}
 
-    public static double armedHostileChance = 0.12D;
+    public static double armedHostileChance = 0.25D;
     public static double maxRange = 32.0D;
     public static float baseDamage = 5.0F;
     public static int minShotCooldownTicks = 5;
@@ -105,7 +105,7 @@ public final class HostileGunsConfig {
             try (OutputStream out = Files.newOutputStream(path)) {
                 p.store(out,
                         "Hostile Guns for NeoForge 1.21.1\n" +
-                        "12% default armed mob chance. Common weapons are weighted much more heavily than rare/exotic weapons.\n" +
+                        "25% default armed mob chance. Common weapons are weighted much more heavily than rare/exotic weapons.\n" +
                         "Aim delay, spread, firing cadence and visible projectile effects are configurable.");
             }
         } catch (IOException ignored) {

@@ -34,3 +34,8 @@ jobs:
         with:
           name: Mainframe-Progression-Bridge-NeoForge-1.21.1
           path: progressionbridge/build/libs/*.jar
+      - name: Upload Cybernetics Content Suppressor
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cybernetics-Content-Suppressor-NeoForge-1.21.1
+          path: cybernetics_suppressor/build/libs/*.jar

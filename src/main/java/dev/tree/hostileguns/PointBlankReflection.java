@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Predicate;
@@ -30,18 +31,24 @@ public final class PointBlankReflection {
     }
 
     public static Object fireMode(ItemStack stack) {
-        try { return gunClass().getMethod("getFireModeInstance", ItemStack.class).invoke(null, stack); }
-        catch (Throwable ignored) { return null; }
+        try {
+            Method method = gunClass().getMethod("getFireModeInstance", ItemStack.class);
+            Object receiver = Modifier.isStatic(method.getModifiers()) ? null : stack.getItem();
+            return method.invoke(receiver, stack);
+        } catch (Throwable ignored) { return null; }
     }
 
     public static int ammo(ItemStack stack, Object fireMode) {
         if (fireMode == null) return 0;
         try {
             for (Method m : gunClass().getMethods()) {
-                if (m.getName().equals("getAmmo") && m.getParameterCount() == 2) return ((Number)m.invoke(null, stack, fireMode)).intValue();
+                if (m.getName().equals("getAmmo") && m.getParameterCount() == 2) {
+                    Object receiver = Modifier.isStatic(m.getModifiers()) ? null : stack.getItem();
+                    return ((Number)m.invoke(receiver, stack, fireMode)).intValue();
+                }
             }
         } catch (Throwable ignored) {}
-        return 0;
+        return -1;
     }
 
     public static void setAmmo(ItemStack stack, Object fireMode, int ammo) {
@@ -49,7 +56,8 @@ public final class PointBlankReflection {
         try {
             for (Method m : gunClass().getMethods()) {
                 if (m.getName().equals("setAmmo") && m.getParameterCount() == 3) {
-                    m.invoke(null, stack, fireMode, ammo);
+                    Object receiver = Modifier.isStatic(m.getModifiers()) ? null : stack.getItem();
+                    m.invoke(receiver, stack, fireMode, ammo);
                     return;
                 }
             }
@@ -158,7 +166,7 @@ public final class PointBlankReflection {
                     long.class, Predicate.class, Predicate.class, List.class);
             List<?> hits = (List<?>)ray.invoke(null, shooter, shooter.getEyePosition(), direction,
                     0.0F, Math.min(100, range), pellets, pelletSpread + spread,
-                    shooter.getRandom().nextLong(), (Predicate<Object>)b -> false, (Predicate<Object>)b -> false,
+                    shooter.getRandom().nextLong(), (Predicate<Object>)b -> true, (Predicate<Object>)b -> true,
                     new java.util.ArrayList<>());
             if (hits == null) return false;
 
@@ -174,13 +182,16 @@ public final class PointBlankReflection {
                 }
             }
 
+            boolean appliedDamage = false;
             for (Object hit : hits) {
                 if (!(hit instanceof EntityHitResult entityHit)) continue;
                 if (hurt == null) return false;
                 hurt.invoke(stack.getItem(), shooter, entityHit, null, stack);
+                appliedDamage = true;
             }
-            // A valid ray query is a fired hitscan even when it finds no entity.
-            return true;
+            // An empty or non-entity result is not proof that a shot was fired.
+            // Let HostileGunEvents use its visible server-side projectile fallback.
+            return appliedDamage;
         } catch (Throwable ignored) {
             return false;
         }

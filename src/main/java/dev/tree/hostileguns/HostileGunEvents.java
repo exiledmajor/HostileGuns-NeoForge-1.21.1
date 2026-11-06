@@ -9,6 +9,10 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
+
+import java.util.Comparator;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -27,6 +31,8 @@ public final class HostileGunEvents {
     private static final String RELOAD_TICKS = "hostileguns_reload_ticks";
     private static final String BURST_LEFT = "hostileguns_burst_left";
     private static final String BURST_COOLDOWN = "hostileguns_burst_cooldown";
+    private static final String FALLBACK_AMMO = "hostileguns_fallback_ammo";
+    private static final String FALLBACK_AMMO_MAX = "hostileguns_fallback_ammo_max";
 
     private HostileGunEvents() {}
 
@@ -40,15 +46,15 @@ public final class HostileGunEvents {
     private static void tryArm(Mob mob) {
         var data = mob.getPersistentData();
         if (data.getBoolean(ROLLED)) return;
-        data.putBoolean(ROLLED, true);
-        if (mob.getRandom().nextDouble() >= HostileGunsConfig.armedHostileChance) return;
 
         Item gun = PointBlankGunPool.chooseWeighted(mob.getRandom());
-        if (gun == null) {
-            PointBlankGunPool.refresh();
-            gun = PointBlankGunPool.chooseWeighted(mob.getRandom());
-        }
+        // Point Blank's registry can finish loading after an entity join callback.
+        // Keep the mob eligible and retry on its server ticks instead of permanently
+        // marking it as rolled with an empty gun pool.
         if (gun == null) return;
+
+        data.putBoolean(ROLLED, true);
+        if (mob.getRandom().nextDouble() >= HostileGunsConfig.armedHostileChance) return;
 
         equip(mob, gun);
         ResourceLocation gunId = BuiltInRegistries.ITEM.getKey(gun);
@@ -61,24 +67,20 @@ public final class HostileGunEvents {
         data.putInt(RELOAD_TICKS, 0);
         data.putInt(BURST_LEFT, 0);
         data.putInt(BURST_COOLDOWN, 0);
-        ensureMagazine(mob.getMainHandItem());
+        ensureMagazine(mob, mob.getMainHandItem());
     }
 
     public static void onEntityTick(EntityTickEvent.Post event) {
         if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) return;
         var data = mob.getPersistentData();
-        if (!data.getBoolean(ARMED) || !mob.isAlive()) return;
+        if (!mob.isAlive()) return;
+        if (!data.getBoolean(ARMED)) {
+            if (!data.getBoolean(ROLLED)) tryArm(mob);
+            return;
+        }
 
         ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
         ItemStack held = mob.getMainHandItem();
-
-        if (isCreateCyberneticsMob(mobId)) {
-            if (held.isEmpty() || !PointBlankReflection.isGun(held.getItem())) {
-                restoreCyberneticsGun(mob);
-                held = mob.getMainHandItem();
-            }
-            if (!mob.getOffhandItem().isEmpty()) mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-        }
 
         if (held.isEmpty() || !PointBlankReflection.isGun(held.getItem())) {
             data.putBoolean(ARMED, false);
@@ -97,6 +99,10 @@ public final class HostileGunEvents {
         }
 
         LivingEntity target = mob.getTarget();
+        if (target == null || !target.isAlive() || target == mob) {
+            target = acquirePlayerTarget(mob);
+            if (target != null) mob.setTarget(target);
+        }
         if (target == null || !target.isAlive() || target == mob) {
             data.putInt(AIM_TARGET, -1);
             data.putInt(AIM_DELAY, 0);
@@ -147,7 +153,7 @@ public final class HostileGunEvents {
         int burstLeft = data.getInt(BURST_LEFT);
         if (burstLeft > 0) {
             Object burstMode = PointBlankReflection.fireMode(held);
-            if (PointBlankReflection.ammo(held, burstMode) <= 0) {
+            if (getAmmo(mob, held, burstMode) <= 0) {
                 beginReload(mob, held);
                 return;
             }
@@ -165,7 +171,7 @@ public final class HostileGunEvents {
         }
 
         Object mode = PointBlankReflection.fireMode(held);
-        int ammo = PointBlankReflection.ammo(held, mode);
+        int ammo = getAmmo(mob, held, mode);
         if (ammo <= 0) {
             beginReload(mob, held);
             return;
@@ -182,14 +188,67 @@ public final class HostileGunEvents {
         }
     }
 
-    private static void ensureMagazine(ItemStack stack) {
+    private static LivingEntity acquirePlayerTarget(Mob mob) {
+        if (!(mob instanceof Monster) && mob.getType().getCategory() != MobCategory.MONSTER) return null;
+        AABB search = mob.getBoundingBox().inflate(HostileGunsConfig.maxRange);
+        return mob.level().getEntitiesOfClass(Player.class, search,
+                        player -> player.isAlive() && !player.isSpectator() && !player.isCreative()
+                                && !mob.isAlliedTo(player) && mob.getSensing().hasLineOfSight(player))
+                .stream()
+                .min(Comparator.comparingDouble(mob::distanceToSqr))
+                .orElse(null);
+    }
+
+    private static void ensureMagazine(Mob mob, ItemStack stack) {
         if (stack.isEmpty() || !PointBlankReflection.isGun(stack.getItem())) return;
         Object mode = PointBlankReflection.fireMode(stack);
-        if (mode == null) return;
-        int capacity = PointBlankReflection.maxAmmo(stack, mode);
-        if (capacity > 0 && PointBlankReflection.ammo(stack, mode) <= 0) {
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        int pointBlankAmmo = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        if (capacity > 0 && pointBlankAmmo >= 0) {
+            if (pointBlankAmmo > 0) return;
             PointBlankReflection.setAmmo(stack, mode, capacity);
+            if (PointBlankReflection.ammo(stack, mode) > 0) return;
         }
+        int fallbackCapacity = fallbackMagazineSize(stack.getItem());
+        var data = mob.getPersistentData();
+        if (data.getInt(FALLBACK_AMMO_MAX) != fallbackCapacity) {
+            data.putInt(FALLBACK_AMMO_MAX, fallbackCapacity);
+            data.putInt(FALLBACK_AMMO, fallbackCapacity);
+        } else if (data.getInt(FALLBACK_AMMO) <= 0) {
+            data.putInt(FALLBACK_AMMO, fallbackCapacity);
+        }
+    }
+
+    private static int getAmmo(Mob mob, ItemStack stack, Object mode) {
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        int pointBlankAmmo = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        return capacity > 0 && pointBlankAmmo >= 0 ? pointBlankAmmo
+                : mob.getPersistentData().getInt(FALLBACK_AMMO);
+    }
+
+    private static void consumeAmmo(Mob mob, ItemStack stack, Object mode, int amount) {
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        int current = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        if (capacity > 0 && current >= 0) {
+            int expected = Math.max(0, current - amount);
+            PointBlankReflection.setAmmo(stack, mode, expected);
+            if (PointBlankReflection.ammo(stack, mode) == expected) return;
+        }
+        var data = mob.getPersistentData();
+        data.putInt(FALLBACK_AMMO, Math.max(0, data.getInt(FALLBACK_AMMO) - amount));
+    }
+
+    private static int fallbackMagazineSize(Item gun) {
+        return switch (WeaponBalance.profile(gun).category()) {
+            case PISTOL -> 12;
+            case SMG -> 30;
+            case RIFLE -> 30;
+            case SHOTGUN -> 8;
+            case SNIPER -> 5;
+            case LMG -> 60;
+            case HEAVY -> 6;
+            case UNKNOWN -> 20;
+        };
     }
 
     private static void beginReload(Mob mob, ItemStack stack) {
@@ -204,29 +263,25 @@ public final class HostileGunEvents {
 
     private static void reloadMagazine(Mob mob, ItemStack stack) {
         Object mode = PointBlankReflection.fireMode(stack);
-        int capacity = PointBlankReflection.maxAmmo(stack, mode);
-        if (capacity > 0) PointBlankReflection.setAmmo(stack, mode, capacity);
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        int current = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        if (capacity > 0 && current >= 0) {
+            PointBlankReflection.setAmmo(stack, mode, capacity);
+            if (PointBlankReflection.ammo(stack, mode) > 0) {
+                mob.getPersistentData().putInt(FALLBACK_AMMO_MAX, fallbackMagazineSize(stack.getItem()));
+                mob.getPersistentData().putInt(FALLBACK_AMMO, fallbackMagazineSize(stack.getItem()));
+                return;
+            }
+        }
+        int fallbackCapacity = fallbackMagazineSize(stack.getItem());
+        mob.getPersistentData().putInt(FALLBACK_AMMO_MAX, fallbackCapacity);
+        mob.getPersistentData().putInt(FALLBACK_AMMO, fallbackCapacity);
         mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         mob.getPersistentData().putInt(COOLDOWN, 3);
     }
 
-    private static void restoreCyberneticsGun(Mob mob) {
-        String id = mob.getPersistentData().getString(GUN_ID);
-        if (id.isEmpty()) return;
-        ResourceLocation key = ResourceLocation.tryParse(id);
-        if (key == null) return;
-        Item gun = BuiltInRegistries.ITEM.get(key);
-        if (gun != null && PointBlankReflection.isGun(gun)) {
-            equip(mob, gun);
-            ensureMagazine(mob.getMainHandItem());
-        }
-    }
-
     private static void equip(Mob mob, Item gun) {
         mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(gun));
-        if (isCreateCyberneticsMob(BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()))) {
-            mob.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-        }
         mob.setDropChance(EquipmentSlot.MAINHAND, 0.05F);
     }
 
@@ -264,9 +319,8 @@ public final class HostileGunEvents {
                                                   double spread, WeaponBalance.Profile profile) {
         if (!(mob.level() instanceof ServerLevel level)) return false;
         Object mode = PointBlankReflection.fireMode(stack);
-        int ammo = PointBlankReflection.ammo(stack, mode);
-        int capacity = PointBlankReflection.maxAmmo(stack, mode);
-        if (mode == null || ammo <= 0 || capacity <= 0) return false;
+        int ammo = getAmmo(mob, stack, mode);
+        if (ammo <= 0) return false;
 
         Vec3 direction = target.getEyePosition().subtract(mob.getEyePosition()).normalize();
         direction = direction.add(
@@ -279,7 +333,7 @@ public final class HostileGunEvents {
         HostileBulletEntity bullet = new HostileBulletEntity(level, mob, muzzle, velocity, damage);
         if (!level.addFreshEntity(bullet)) return false;
 
-        PointBlankReflection.setAmmo(stack, mode, ammo - 1);
+        consumeAmmo(mob, stack, mode, 1);
         return true;
     }
 
@@ -298,16 +352,12 @@ public final class HostileGunEvents {
     }
 
     private static boolean eligibleType(Mob mob, ResourceLocation id) {
+        // Create: Cybernetics mobs retain their native AI and natural spawning;
+        // they are deliberately excluded from this mod's gun assignment.
+        if ("createcybernetics".equals(id.getNamespace())) return false;
         if (HostileGunsConfig.excludedEntities.contains(id.toString())) return false;
         if (!HostileGunsConfig.allowModdedHostiles && !"minecraft".equals(id.getNamespace())) return false;
         return mob.getType().getCategory() == MobCategory.MONSTER || mob instanceof Monster;
     }
 
-    private static boolean isCreateCyberneticsMob(ResourceLocation id) {
-        if (id == null || !"createcybernetics".equals(id.getNamespace())) return false;
-        return switch (id.getPath()) {
-            case "cyberzombie", "cyberskeleton", "punklin", "pigstrom", "hogboy" -> true;
-            default -> false;
-        };
-    }
 }

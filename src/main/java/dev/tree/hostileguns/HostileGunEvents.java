@@ -203,9 +203,11 @@ public final class HostileGunEvents {
         if (stack.isEmpty() || !PointBlankReflection.isGun(stack.getItem())) return;
         Object mode = PointBlankReflection.fireMode(stack);
         int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
-        if (capacity > 0) {
-            if (PointBlankReflection.ammo(stack, mode) <= 0) PointBlankReflection.setAmmo(stack, mode, capacity);
-            return;
+        int pointBlankAmmo = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        if (capacity > 0 && pointBlankAmmo >= 0) {
+            if (pointBlankAmmo > 0) return;
+            PointBlankReflection.setAmmo(stack, mode, capacity);
+            if (PointBlankReflection.ammo(stack, mode) > 0) return;
         }
         int fallbackCapacity = fallbackMagazineSize(stack.getItem());
         var data = mob.getPersistentData();
@@ -219,19 +221,21 @@ public final class HostileGunEvents {
 
     private static int getAmmo(Mob mob, ItemStack stack, Object mode) {
         int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
-        return capacity > 0 ? PointBlankReflection.ammo(stack, mode)
+        int pointBlankAmmo = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        return capacity > 0 && pointBlankAmmo >= 0 ? pointBlankAmmo
                 : mob.getPersistentData().getInt(FALLBACK_AMMO);
     }
 
     private static void consumeAmmo(Mob mob, ItemStack stack, Object mode, int amount) {
         int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
-        if (capacity > 0) {
-            PointBlankReflection.setAmmo(stack, mode,
-                    Math.max(0, PointBlankReflection.ammo(stack, mode) - amount));
-        } else {
-            var data = mob.getPersistentData();
-            data.putInt(FALLBACK_AMMO, Math.max(0, data.getInt(FALLBACK_AMMO) - amount));
+        int current = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        if (capacity > 0 && current >= 0) {
+            int expected = Math.max(0, current - amount);
+            PointBlankReflection.setAmmo(stack, mode, expected);
+            if (PointBlankReflection.ammo(stack, mode) == expected) return;
         }
+        var data = mob.getPersistentData();
+        data.putInt(FALLBACK_AMMO, Math.max(0, data.getInt(FALLBACK_AMMO) - amount));
     }
 
     private static int fallbackMagazineSize(Item gun) {
@@ -260,13 +264,18 @@ public final class HostileGunEvents {
     private static void reloadMagazine(Mob mob, ItemStack stack) {
         Object mode = PointBlankReflection.fireMode(stack);
         int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
-        if (capacity > 0) {
+        int current = mode == null ? -1 : PointBlankReflection.ammo(stack, mode);
+        if (capacity > 0 && current >= 0) {
             PointBlankReflection.setAmmo(stack, mode, capacity);
-        } else {
-            int fallbackCapacity = fallbackMagazineSize(stack.getItem());
-            mob.getPersistentData().putInt(FALLBACK_AMMO_MAX, fallbackCapacity);
-            mob.getPersistentData().putInt(FALLBACK_AMMO, fallbackCapacity);
+            if (PointBlankReflection.ammo(stack, mode) > 0) {
+                mob.getPersistentData().putInt(FALLBACK_AMMO_MAX, fallbackMagazineSize(stack.getItem()));
+                mob.getPersistentData().putInt(FALLBACK_AMMO, fallbackMagazineSize(stack.getItem()));
+                return;
+            }
         }
+        int fallbackCapacity = fallbackMagazineSize(stack.getItem());
+        mob.getPersistentData().putInt(FALLBACK_AMMO_MAX, fallbackCapacity);
+        mob.getPersistentData().putInt(FALLBACK_AMMO, fallbackCapacity);
         mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         mob.getPersistentData().putInt(COOLDOWN, 3);
     }

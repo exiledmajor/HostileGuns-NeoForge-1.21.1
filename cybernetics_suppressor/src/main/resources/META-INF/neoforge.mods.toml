@@ -29,6 +29,6 @@ side="BOTH"
 [[dependencies.cybernetics_suppressor]]
 modId="createcybernetics"
 type="required"
-versionRange="[0.5.2,)"
+versionRange="[0,)"
 ordering="AFTER"
 side="BOTH"

@@ -31,6 +31,8 @@ public final class HostileGunEvents {
     private static final String RELOAD_TICKS = "hostileguns_reload_ticks";
     private static final String BURST_LEFT = "hostileguns_burst_left";
     private static final String BURST_COOLDOWN = "hostileguns_burst_cooldown";
+    private static final String FALLBACK_AMMO = "hostileguns_fallback_ammo";
+    private static final String FALLBACK_AMMO_MAX = "hostileguns_fallback_ammo_max";
 
     private HostileGunEvents() {}
 
@@ -69,7 +71,7 @@ public final class HostileGunEvents {
         data.putInt(RELOAD_TICKS, 0);
         data.putInt(BURST_LEFT, 0);
         data.putInt(BURST_COOLDOWN, 0);
-        ensureMagazine(mob.getMainHandItem());
+        ensureMagazine(mob, mob.getMainHandItem());
     }
 
     public static void onEntityTick(EntityTickEvent.Post event) {
@@ -155,7 +157,7 @@ public final class HostileGunEvents {
         int burstLeft = data.getInt(BURST_LEFT);
         if (burstLeft > 0) {
             Object burstMode = PointBlankReflection.fireMode(held);
-            if (PointBlankReflection.ammo(held, burstMode) <= 0) {
+            if (getAmmo(mob, held, burstMode) <= 0) {
                 beginReload(mob, held);
                 return;
             }
@@ -173,7 +175,7 @@ public final class HostileGunEvents {
         }
 
         Object mode = PointBlankReflection.fireMode(held);
-        int ammo = PointBlankReflection.ammo(held, mode);
+        int ammo = getAmmo(mob, held, mode);
         if (ammo <= 0) {
             beginReload(mob, held);
             return;
@@ -201,14 +203,52 @@ public final class HostileGunEvents {
                 .orElse(null);
     }
 
-    private static void ensureMagazine(ItemStack stack) {
+    private static void ensureMagazine(Mob mob, ItemStack stack) {
         if (stack.isEmpty() || !PointBlankReflection.isGun(stack.getItem())) return;
         Object mode = PointBlankReflection.fireMode(stack);
-        if (mode == null) return;
-        int capacity = PointBlankReflection.maxAmmo(stack, mode);
-        if (capacity > 0 && PointBlankReflection.ammo(stack, mode) <= 0) {
-            PointBlankReflection.setAmmo(stack, mode, capacity);
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        if (capacity > 0) {
+            if (PointBlankReflection.ammo(stack, mode) <= 0) PointBlankReflection.setAmmo(stack, mode, capacity);
+            return;
         }
+        int fallbackCapacity = fallbackMagazineSize(stack.getItem());
+        var data = mob.getPersistentData();
+        if (data.getInt(FALLBACK_AMMO_MAX) != fallbackCapacity) {
+            data.putInt(FALLBACK_AMMO_MAX, fallbackCapacity);
+            data.putInt(FALLBACK_AMMO, fallbackCapacity);
+        } else if (data.getInt(FALLBACK_AMMO) <= 0) {
+            data.putInt(FALLBACK_AMMO, fallbackCapacity);
+        }
+    }
+
+    private static int getAmmo(Mob mob, ItemStack stack, Object mode) {
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        return capacity > 0 ? PointBlankReflection.ammo(stack, mode)
+                : mob.getPersistentData().getInt(FALLBACK_AMMO);
+    }
+
+    private static void consumeAmmo(Mob mob, ItemStack stack, Object mode, int amount) {
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        if (capacity > 0) {
+            PointBlankReflection.setAmmo(stack, mode,
+                    Math.max(0, PointBlankReflection.ammo(stack, mode) - amount));
+        } else {
+            var data = mob.getPersistentData();
+            data.putInt(FALLBACK_AMMO, Math.max(0, data.getInt(FALLBACK_AMMO) - amount));
+        }
+    }
+
+    private static int fallbackMagazineSize(Item gun) {
+        return switch (WeaponBalance.profile(gun).category()) {
+            case PISTOL -> 12;
+            case SMG -> 30;
+            case RIFLE -> 30;
+            case SHOTGUN -> 8;
+            case SNIPER -> 5;
+            case LMG -> 60;
+            case HEAVY -> 6;
+            case UNKNOWN -> 20;
+        };
     }
 
     private static void beginReload(Mob mob, ItemStack stack) {
@@ -223,8 +263,14 @@ public final class HostileGunEvents {
 
     private static void reloadMagazine(Mob mob, ItemStack stack) {
         Object mode = PointBlankReflection.fireMode(stack);
-        int capacity = PointBlankReflection.maxAmmo(stack, mode);
-        if (capacity > 0) PointBlankReflection.setAmmo(stack, mode, capacity);
+        int capacity = mode == null ? 0 : PointBlankReflection.maxAmmo(stack, mode);
+        if (capacity > 0) {
+            PointBlankReflection.setAmmo(stack, mode, capacity);
+        } else {
+            int fallbackCapacity = fallbackMagazineSize(stack.getItem());
+            mob.getPersistentData().putInt(FALLBACK_AMMO_MAX, fallbackCapacity);
+            mob.getPersistentData().putInt(FALLBACK_AMMO, fallbackCapacity);
+        }
         mob.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         mob.getPersistentData().putInt(COOLDOWN, 3);
     }
@@ -268,9 +314,8 @@ public final class HostileGunEvents {
                                                   double spread, WeaponBalance.Profile profile) {
         if (!(mob.level() instanceof ServerLevel level)) return false;
         Object mode = PointBlankReflection.fireMode(stack);
-        int ammo = PointBlankReflection.ammo(stack, mode);
-        int capacity = PointBlankReflection.maxAmmo(stack, mode);
-        if (mode == null || ammo <= 0 || capacity <= 0) return false;
+        int ammo = getAmmo(mob, stack, mode);
+        if (ammo <= 0) return false;
 
         Vec3 direction = target.getEyePosition().subtract(mob.getEyePosition()).normalize();
         direction = direction.add(
@@ -283,7 +328,7 @@ public final class HostileGunEvents {
         HostileBulletEntity bullet = new HostileBulletEntity(level, mob, muzzle, velocity, damage);
         if (!level.addFreshEntity(bullet)) return false;
 
-        PointBlankReflection.setAmmo(stack, mode, ammo - 1);
+        consumeAmmo(mob, stack, mode, 1);
         return true;
     }
 

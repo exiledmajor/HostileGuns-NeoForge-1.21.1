@@ -4,11 +4,11 @@ license="CC0-1.0"
 
 [[mods]]
 modId="hostileguns"
-version="1.0.2"
+version="1.0.3"
 displayName="Hostile Guns"
 authors="Tree + OpenAI"
 description='''
-Lets eligible hostile mobs spawn with and use Vic's Point Blank firearms on NeoForge 1.21.1. Uses Point Blank's own configured client effects when available and supports Create Cybernetics hostile mobs.
+Lets eligible hostile mobs spawn with and use Vic's Point Blank firearms on NeoForge 1.21.1. Uses Point Blank's own configured client effects when available while leaving Create: Cybernetics mobs on their native AI and equipment.
 '''
 
 [[mixins]]

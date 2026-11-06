@@ -9,6 +9,10 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
+
+import java.util.Comparator;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -40,15 +44,19 @@ public final class HostileGunEvents {
     private static void tryArm(Mob mob) {
         var data = mob.getPersistentData();
         if (data.getBoolean(ROLLED)) return;
-        data.putBoolean(ROLLED, true);
-        if (mob.getRandom().nextDouble() >= HostileGunsConfig.armedHostileChance) return;
 
         Item gun = PointBlankGunPool.chooseWeighted(mob.getRandom());
         if (gun == null) {
             PointBlankGunPool.refresh();
             gun = PointBlankGunPool.chooseWeighted(mob.getRandom());
         }
+        // Point Blank's registry can finish loading after an entity join callback.
+        // Keep the mob eligible and retry on its server ticks instead of permanently
+        // marking it as rolled with an empty gun pool.
         if (gun == null) return;
+
+        data.putBoolean(ROLLED, true);
+        if (mob.getRandom().nextDouble() >= HostileGunsConfig.armedHostileChance) return;
 
         equip(mob, gun);
         ResourceLocation gunId = BuiltInRegistries.ITEM.getKey(gun);
@@ -67,7 +75,11 @@ public final class HostileGunEvents {
     public static void onEntityTick(EntityTickEvent.Post event) {
         if (!(event.getEntity() instanceof Mob mob) || mob.level().isClientSide()) return;
         var data = mob.getPersistentData();
-        if (!data.getBoolean(ARMED) || !mob.isAlive()) return;
+        if (!mob.isAlive()) return;
+        if (!data.getBoolean(ARMED)) {
+            if (!data.getBoolean(ROLLED)) tryArm(mob);
+            return;
+        }
 
         ResourceLocation mobId = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType());
         ItemStack held = mob.getMainHandItem();
@@ -89,6 +101,10 @@ public final class HostileGunEvents {
         }
 
         LivingEntity target = mob.getTarget();
+        if (target == null || !target.isAlive() || target == mob) {
+            target = acquirePlayerTarget(mob);
+            if (target != null) mob.setTarget(target);
+        }
         if (target == null || !target.isAlive() || target == mob) {
             data.putInt(AIM_TARGET, -1);
             data.putInt(AIM_DELAY, 0);
@@ -172,6 +188,17 @@ public final class HostileGunEvents {
                 data.putInt(COOLDOWN, chooseCooldown(mob, held.getItem()));
             }
         }
+    }
+
+    private static LivingEntity acquirePlayerTarget(Mob mob) {
+        if (!(mob instanceof Monster) && mob.getType().getCategory() != MobCategory.MONSTER) return null;
+        AABB search = mob.getBoundingBox().inflate(HostileGunsConfig.maxRange);
+        return mob.level().getEntitiesOfClass(Player.class, search,
+                        player -> player.isAlive() && !player.isSpectator() && !player.isCreative()
+                                && !mob.isAlliedTo(player) && mob.getSensing().hasLineOfSight(player))
+                .stream()
+                .min(Comparator.comparingDouble(mob::distanceToSqr))
+                .orElse(null);
     }
 
     private static void ensureMagazine(ItemStack stack) {

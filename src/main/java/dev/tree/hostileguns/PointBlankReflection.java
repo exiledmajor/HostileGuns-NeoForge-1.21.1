@@ -48,7 +48,7 @@ public final class PointBlankReflection {
                 }
             }
         } catch (Throwable ignored) {}
-        return 0;
+        return -1;
     }
 
     public static void setAmmo(ItemStack stack, Object fireMode, int ammo) {

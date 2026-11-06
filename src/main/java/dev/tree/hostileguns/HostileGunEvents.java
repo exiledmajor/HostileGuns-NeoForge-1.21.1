@@ -48,10 +48,6 @@ public final class HostileGunEvents {
         if (data.getBoolean(ROLLED)) return;
 
         Item gun = PointBlankGunPool.chooseWeighted(mob.getRandom());
-        if (gun == null) {
-            PointBlankGunPool.refresh();
-            gun = PointBlankGunPool.chooseWeighted(mob.getRandom());
-        }
         // Point Blank's registry can finish loading after an entity join callback.
         // Keep the mob eligible and retry on its server ticks instead of permanently
         // marking it as rolled with an empty gun pool.

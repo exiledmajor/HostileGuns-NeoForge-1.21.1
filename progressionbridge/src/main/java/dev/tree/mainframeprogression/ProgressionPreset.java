@@ -18,19 +18,27 @@ public final class ProgressionPreset {
     public static void installOnce() {
         Path config = FMLPaths.CONFIGDIR.get();
         Path marker = config.resolve("mainframe_progression").resolve(MARKER);
-        if (Files.exists(marker)) return;
 
         try {
             Files.createDirectories(marker.getParent());
+            if (!Files.exists(marker)) {
+                installRasAttribute(config);
+                tuneRas(config);
+                installCyberpunkUi(config);
+                Files.writeString(marker,
+                        "Mainframe progression preset applied once. Delete this file to reapply defaults.\\n",
+                        StandardCharsets.UTF_8);
+            } else {
+                updateVersatilityDescription(config);
+            }
 
-            installRasAttribute(config);
-            tuneRas(config);
-            tuneRemnants(config);
-            installCyberpunkUi(config);
-
-            Files.writeString(marker,
-                    "Mainframe progression preset applied once. Delete this file to reapply defaults.\n",
-                    StandardCharsets.UTF_8);
+            Path remnantsMarker = marker.getParent().resolve(REMNANTS_MARKER);
+            if (!Files.exists(remnantsMarker)) {
+                tuneRemnants(config);
+                Files.writeString(remnantsMarker,
+                        "Remnants 3.1+ progression tuning applied once.\\n",
+                        StandardCharsets.UTF_8);
+            }
         } catch (IOException ignored) {
         }
     }

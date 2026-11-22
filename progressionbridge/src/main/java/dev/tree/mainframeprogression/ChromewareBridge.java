@@ -9,7 +9,7 @@ import java.util.function.Supplier;
  * Optional Chromeware integration owned by Mainframe.
  *
  * Mainframe only grants the Cyberware Versatility capacity bonus. Humanity,
- * cyberpsychosis, implant strain, wear, malfunctions and their recovery are
+ * implant strain, wear, malfunctions and their recovery are
  * exclusively managed by Chromeware.
  */
 public final class ChromewareBridge {
